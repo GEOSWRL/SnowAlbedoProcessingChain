@@ -18,15 +18,16 @@ import numpy as np
 import matplotlib.pyplot as plt
 from PIL import Image
 import scipy.ndimage as ndimage
+import exiftool
 
 path_to_temp = 'C:/Users/aman3/Documents/GradSchool/testing/temp/'
 path_to_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-path_to_output = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/'
+path_to_output = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
 path_to_log = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_merged.csv'
 path_to_exif = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_exif.csv'
 path_to_raw_vignette_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/'
-
-
+vignette_mask_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/filters/'
+EXIFTOOL_PATH = 'C:/exiftool'
 
 
 def create_geotiff (out_path, dataset):
@@ -155,9 +156,9 @@ def split_rgb(tiff_image):
     blue = image.read(3)
     return red, green, blue
     
-def avg_rgb(raw_image):
+def avg_rgb(red, green, blue, image, out_dir):
     """
-    Converts a .DNG file into a TIFF where each pixel is the average of R,G, and B
+    Takes the average of red, green, and blue arrays and saves to new tiff
 
     Parameters
     ----------
@@ -169,33 +170,41 @@ def avg_rgb(raw_image):
     result : string
         path to RGB averaged tiff file
     """
-    #convert to tiff
-    tiff_image = raw_to_tiff(raw_image)
-    
-    #split tiff into R, G, and B tiffs
-    red, green, blue = split_rgb(tiff_image)
-    
+    out_path = out_dir + image
     #average of all 3 bands
-    avg = ((red + green + blue)/3)
-    
-    #multiply by correction factor
-    avg_corrected = albedo_correction(raw_image, path_to_log, avg).astype('uint16')
+    avg = ((red + green + blue)/3).astype('uint16')
     
     #create new tiff
-    new_dataset = rasterio.open(
-    path_to_output + raw_image[:-4] + '_avg.tiff',
-    'w',
-    driver='GTiff',
-    height=avg_corrected.shape[0],
-    width=avg_corrected.shape[1],
-    count=1,
-    dtype=avg_corrected.dtype
-    )
-    new_dataset.write(avg_corrected,1)
-    new_dataset.close()
+    create_geotiff(out_path, avg)
+    #reduce bit depth to 16-bit
     
+"""    
+def illumination_correction(tiff_image):
+    correction_factor = illumination_function(associated_upward_measurement)
     
-def albedo_correction(raw_image, path_to_log, tiff):
+    image = rasterio.open(tiff_image)
+    
+    image = image * correction_factor
+    return
+"""    
+    
+def broadband_correction(raw_image, path_to_log, tiff):
+    """
+    Applies correction factor from pyranometers to RGB averate tiff image
+
+    Parameters
+    ----------
+    raw_image : string
+        .DNG image filename e.g. ("image01.DNG")
+    tiff : string
+        .tiff image filename e.g. ("image01.tiff")
+    path_to_log: string
+        path to merged DJI-Meteon log
+    Returns
+    -------
+    result : string
+        path to corrected tiff file
+    """
     #open raw image and extract timestamp
     raw = open(path_to_images + raw_image, 'rb')
     tags = exifread.process_file(raw)
@@ -214,8 +223,7 @@ def albedo_correction(raw_image, path_to_log, tiff):
     row = df.loc[df['key_0'] == str(dateTime_obj)].index
     
     if(row.values.size == 0):
-        print('no measurements associated with ' + raw_image + ', no correction was applied')
-        return tiff
+        print('no measurements associated with ' + raw_image)
     
     associated_albedo = float(df.iloc[row]['albedo'].values)
     
@@ -245,52 +253,45 @@ def read_EXIF(path_to_images, path_to_output):
         path to .csv file
     """
     
-    df = pd.DataFrame(columns = ['Image ID', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Lens Model', 'Focal Length'
-                         ])
-    for filename in os.listdir(path_to_images):
-        if filename.endswith(".DNG"):
-        
-            raw_open = open(path_to_images + filename, 'rb')
-            tags = exifread.process_file(raw_open)
+    df = pd.DataFrame(columns = ['Image ID', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Pitch', 'Roll', 'Yaw'])
 
+    with exiftool.ExifTool(EXIFTOOL_PATH) as et:
+        for filename in os.listdir(path_to_images):
+            if filename.endswith(".DNG"):
+                metadata = et.get_metadata_batch([path_to_images + filename])[0]
+                
+                GPSLongitude = metadata['XMP:GPSLongtitude']
+                GPSLatitude = metadata['XMP:GPSLatitude']
+                GPSAltitude = metadata['EXIF:GPSAltitude']
+                Pitch = metadata['MakerNotes:CameraPitch']
+                Roll = metadata['MakerNotes:CameraRoll']
+                Yaw = metadata['MakerNotes:CameraYaw']
+                
+                df = df.append(pd.Series([filename[:-4], GPSLatitude, GPSLongitude, GPSAltitude,
+                                          Pitch, Roll, Yaw], index=df.columns), ignore_index = True)
 
-            GPSLatitude = str(tags['GPS GPSLatitude'].values).strip('][').split(', ')
-            GPSLatitude = (int(GPSLatitude[0]), int(GPSLatitude[1]), split(GPSLatitude[2]))
-            GPSLatitudeRef = str(tags['GPS GPSLatitudeRef'])
-        
-
-            GPSLongitude = str(tags['GPS GPSLongitude'].values).strip('][').split(', ')
-            GPSLongitude = (int(GPSLongitude[0]), int(GPSLongitude[1]), split(GPSLongitude[2]))
-            GPSLongitudeRef = str(tags['GPS GPSLongitudeRef'])
-        
-            [GPSLatitude, GPSLongitude] = LatLong_to_decimal(GPSLatitude, GPSLatitudeRef, GPSLongitude, GPSLongitudeRef)
-
-
-            GPSAltitude = split(str(tags['GPS GPSAltitude']))
-            #GPSAltitudeRef = int(str(tags['GPS GPSAltitudeRef']))
-        
-            LensModel = str(tags['EXIF LensModel'])
-        
-        
-        
-        
-            #LensMake = str(tags['EXIF LensMake'])
-            #LensSpecification = str(tags['EXIF LensSpecification'])
-            FocalLength = str(tags['EXIF FocalLength'])
-            #FocalLength35 = str(tags['EXIF FocalLengthIn35mmFilm'])
-            #ShutterSpd = str(tags['EXIF ShutterSpeedValue'])
-            #Aperture = str(tags['EXIF ApertureValue'])
-            #ISO = str(tags['EXIF FNumber'])
-        
-            df = df.append(pd.Series([filename, GPSLatitude, GPSLongitude, GPSAltitude,
-                       LensModel, FocalLength], index=df.columns), ignore_index = True)
-            
     df.set_index('Image ID', inplace = True)
     df.to_csv(path_to_output + 'EXIF.csv')
-    
+                            
     return (path_to_output + 'EXIF.csv')
 
 def create_vignette_masks(path_to_raw_vignette_images):    
+    """
+    Reads EXIF data from RAW images and creates a text file with GPS fields for use in Agisoft
+
+    Parameters
+    ----------
+    path_to_raw_vignette_images : string
+        path to .tiff images to be used to generate vignette filter
+        
+    path_to_output : string
+        path to save csv file to
+    
+    Returns
+    -------
+    result : none
+        creates a vignette mask for each band in tiff image at specified output directory
+    """
     out_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/'
     average_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/avg/'
     filters_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/filters/'
@@ -379,7 +380,11 @@ def create_vignette_masks(path_to_raw_vignette_images):
        print("saving mask to new tiff")
        create_geotiff(filters_dir + 'avg_' + band + '_smoothed_mask.tiff', vignette_mask.astype(np.float32))
 
+#def illumination_correction(tiff, correction_function):
+
+
 def vignette_correction(mask_dir, path_to_tiff):
+    
     red_mask = Image.open(mask_dir + 'avg_R_smoothed_mask.tiff')
     red_mask = np.array(red_mask)
     
@@ -391,30 +396,27 @@ def vignette_correction(mask_dir, path_to_tiff):
     
     print("correcting image")
     red, green, blue = split_rgb(path_to_tiff)
-    create_geotiff('C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/DJI_0726_red.tiff', red)
     corrected_red = red/red_mask
     corrected_green = green/green_mask
     corrected_blue = blue/blue_mask
     
     return corrected_red, corrected_green, corrected_blue
 
+tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
+filtered = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/vignette_correction/'
+raw = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
+exif = 'C:/Users/aman3/Documents/GradSchool/testing/output/'
 
-
-red, green, blue = vignette_correction('C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/filters/','C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/DJI_0726.tiff')
-create_geotiff('C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/DJI_0726_redcorrected.tiff', red)
-avg_rgb_corrected = ((red + green + blue)/3)
-create_geotiff('C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/DJI_0726_corrected.tiff', avg_rgb_corrected)
-  
-  
-
-  
 """
-shutil.rmtree(path_to_temp)
-os.mkdir(path_to_temp)
-for filename in os.listdir(path_to_images):
-    
+for filename in os.listdir(raw):  
     if filename.endswith(".DNG"):
-        avg_rgb(filename)
-print("done.")
-#shutil.rmtree(path_to_temp)
-"""
+        raw_to_tiff(filename, path_to_output)  
+
+"""   
+for filename in os.listdir(tiffs):  
+    if filename.endswith(".tiff"):
+        r,g,b = vignette_correction(vignette_mask_dir, tiffs+filename)
+        avg_rgb(r, g, b, filename, filtered)  
+
+
+
