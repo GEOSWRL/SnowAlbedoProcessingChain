@@ -1,10 +1,3 @@
 # SnowAlbedoProcessingChain
 
-# Dependencies
-# Install in Python console
-# pip install rawpy
-# pip install exifread
-
-# install in anaconda prompt
-# conda install -c conda-forge gdal
-# conda install rasterio
+This repository contains all code used to merge DJI flight logs with logs from the Meteon 2.0 datalogger, and for the preprocessing of imagery and irradiance data to be used in the generation of high resolution albedo surfaces.
