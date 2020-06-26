@@ -21,7 +21,9 @@ import scipy.ndimage as ndimage
 import exiftool
 
 path_to_temp = 'C:/Users/aman3/Documents/GradSchool/testing/temp/'
+path_to_raw_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
 path_to_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
+path_to_tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
 path_to_output = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
 path_to_log = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_merged.csv'
 path_to_exif = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_exif.csv'
@@ -103,7 +105,7 @@ def split(s):
         return (float(num)/ int(denom))
 
 
-def raw_to_tiff(raw_image, out_dir):
+def raw_to_tiff(raw_image):
     """
     Converts a RAW file to a TIFF
 
@@ -119,17 +121,17 @@ def raw_to_tiff(raw_image, out_dir):
 
     """
     
-    raw_image_full_path = path_to_images + raw_image
-    print("opening " + raw_image)
+    #set input/output paths
+    raw_image_full_path = path_to_raw_images + raw_image
+    out_path = path_to_tiffs + raw_image[:-3] + "tiff"
     
-    out_path = out_dir + raw_image[:-3] + "tiff"
-    
-    
+    #convert to .tiff
     print("converting to tiff")
     with rawpy.imread(raw_image_full_path) as raw:
         rgb = raw.postprocess(gamma=(1,1), no_auto_bright = True, output_bps=16)
         imageio.imsave(out_path, rgb)
     print("done")
+    
     return out_path
     
 
@@ -150,33 +152,51 @@ def split_rgb(tiff_image):
 
     """
     print("splitting int rgb")
+   
+    #open image
     image = rasterio.open(tiff_image)
+    
+    #read bands
     red = image.read(1)
     green = image.read(2)
     blue = image.read(3)
+   
     return red, green, blue
     
-def avg_rgb(red, green, blue, image, out_dir):
+def avg_rgb(tiff_image, out_dir):
     """
     Takes the average of red, green, and blue arrays and saves to new tiff
 
     Parameters
     ----------
-    raw_image : string
-        .DNG image filename e.g. ("image01.DNG")
+    red : [float]
+        float array of red band of .tiff image
+    green : [float]
+        float array of green band of .tiff image
+    blue : [float]
+        float array of blue band of .tiff image
+    tiff_image: string
+        name of .tiff image to take average of
+    out_dir: string
+        image output directory
     
     Returns
     -------
-    result : string
-        path to RGB averaged tiff file
+    result : null
+        geotiff of rgb average tiff image created in out_dir
     """
-    out_path = out_dir + image
+    
+    #path to output image
+    out_path = out_dir + tiff_image
+    
+    #split .tiff into r,g,b bands
+    red, green, blue = split_rgb(tiff_image)
+    
     #average of all 3 bands
     avg = ((red + green + blue)/3).astype('uint16')
     
     #create new tiff
     create_geotiff(out_path, avg)
-    #reduce bit depth to 16-bit
     
 """    
 def illumination_correction(tiff_image):
@@ -237,12 +257,12 @@ def broadband_correction(raw_image, path_to_log, tiff):
     
 def read_EXIF(path_to_images, path_to_output):
     """
-    Reads EXIF data from RAW images and creates a text file with GPS fields for use in Agisoft
+    Reads EXIF data from DJI images and creates a text file with GPS fields for use in Agisoft
 
     Parameters
     ----------
     path_to_images : string
-        path to .DNG images
+        path to DJI images
         
     path_to_output : string
         path to save csv file to
@@ -251,33 +271,58 @@ def read_EXIF(path_to_images, path_to_output):
     -------
     result : string
         path to .csv file
+        
     """
     
-    df = pd.DataFrame(columns = ['Image ID', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Pitch', 'Roll', 'Yaw'])
+    df = pd.DataFrame(columns = ['Image ID', 'Timestamp', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Pitch', 'Roll', 'Yaw', 'Downwelling Irradiance', 'Upwelling Irradiance', 'Albedo'])
 
     with exiftool.ExifTool(EXIFTOOL_PATH) as et:
         for filename in os.listdir(path_to_images):
             if filename.endswith(".DNG"):
-                metadata = et.get_metadata_batch([path_to_images + filename])[0]
+                metadata = et.get_metadata_batch([path_to_images + filename])[0]  
                 
-                GPSLongitude = metadata['XMP:GPSLongtitude']
-                GPSLatitude = metadata['XMP:GPSLatitude']
-                GPSAltitude = metadata['EXIF:GPSAltitude']
-                Pitch = metadata['MakerNotes:CameraPitch']
-                Roll = metadata['MakerNotes:CameraRoll']
-                Yaw = metadata['MakerNotes:CameraYaw']
+                Timestamp = metadata['EXIF:CreateDate']
+                YMD = datetime.strptime(Timestamp[:10], '%Y:%m:%d')
+                HMS = datetime.strptime(Timestamp[10:], ' %H:%M:%S')
+                Timestamp = YMD.replace(hour = HMS.hour, minute = HMS.minute, second = HMS.second)   
+                Timestamp = Timestamp.astimezone(pytz.timezone('US/Mountain'))
                 
-                df = df.append(pd.Series([filename[:-4], GPSLatitude, GPSLongitude, GPSAltitude,
-                                          Pitch, Roll, Yaw], index=df.columns), ignore_index = True)
+                #read in logfile
+                df2 = pd.read_csv(path_to_log)
+                
+                #extract albedo value associated with image
+                row = df2.loc[df2['key_0'] == str(Timestamp)].index
+                    
+                if(row.values.size == 0):
+                    print('no measurements associated with ' + filename)
+                else:
+                    downwelling = float(df2.iloc[row]['incoming (W/m^2)'].values)
+                    upwelling = float(df2.iloc[row]['reflected (W/m^2)'].values)
+                    albedo = float(df2.iloc[row]['albedo'].values)
+                
+                GPSLongitude = metadata['Composite:GPSLongitude']
+                GPSLatitude = metadata['Composite:GPSLatitude']
+                GPSAltitude = metadata['Composite:GPSAltitude']
+                Pitch = metadata['MakerNotes:CameraPitch'] + 90
+                
+                if (metadata['MakerNotes:CameraYaw']>=0):
+                    Yaw = metadata['MakerNotes:CameraYaw']
+                else:
+                    Yaw = 360 + metadata['MakerNotes:CameraYaw']
+                
+                Roll = metadata['MakerNotes:CameraRoll']            
+                
+                df = df.append(pd.Series([filename, Timestamp, GPSLatitude, GPSLongitude, GPSAltitude,
+                                      Pitch, Roll, Yaw, downwelling, upwelling, albedo], index=df.columns), ignore_index = True)
 
     df.set_index('Image ID', inplace = True)
-    df.to_csv(path_to_output + 'EXIF.csv')
+    df.to_csv(path_to_output + 'imageData.csv')
                             
-    return (path_to_output + 'EXIF.csv')
+    return (path_to_output + 'imageData.csv')
 
 def create_vignette_masks(path_to_raw_vignette_images):    
     """
-    Reads EXIF data from RAW images and creates a text file with GPS fields for use in Agisoft
+    Creates radial vignette masks for red, green, and blue bands of imagery
 
     Parameters
     ----------
@@ -301,6 +346,7 @@ def create_vignette_masks(path_to_raw_vignette_images):
     b = []
     
     numFiles = 0
+    
     """
     for filename in os.listdir(path_to_raw_vignette_images):
         if filename.endswith(".DNG"):
@@ -312,8 +358,9 @@ def create_vignette_masks(path_to_raw_vignette_images):
         if filename.endswith(".tiff"):
             print(filename)
             tiff = out_dir+filename
-            #split tiff into R, G, and B tiffs
-            red, green, blue = split_rgb(tiff)
+            red, green, blue = split_rgb(tiff) #split tiff into R, G, and B tiffs
+            
+            #create image sum matrix for each band
             if numFiles == 0:
                 r = red
                 g = green
@@ -325,19 +372,22 @@ def create_vignette_masks(path_to_raw_vignette_images):
                 b += blue
             numFiles+=1
     
+    #create image average for each band
     avg_R = np.divide(r,numFiles).astype('uint16')
     avg_G = np.divide(g,numFiles).astype('uint16')
     avg_B = np.divide(b,numFiles).astype('uint16')
     
+    #apply gaussian smoothing to each average image
     avg_R_smoothed = ndimage.gaussian_filter(avg_R, sigma=10, order=0)
     avg_G_smoothed = ndimage.gaussian_filter(avg_G, sigma=10, order=0)
     avg_B_smoothed = ndimage.gaussian_filter(avg_B, sigma=10, order=0)
     
+    #create tiff of average image for each band
     create_geotiff(average_dir + 'avg_R_smoothed.tiff', avg_R_smoothed)
     create_geotiff(average_dir + 'avg_G_smoothed.tiff', avg_G_smoothed)
     create_geotiff(average_dir + 'avg_B_smoothed.tiff', avg_B_smoothed)
 
-                            
+    #get image dimensions                      
     height = avg_R.shape[0]
     width = avg_R.shape[1]
     center_height = int(height/2)
@@ -353,23 +403,24 @@ def create_vignette_masks(path_to_raw_vignette_images):
             pixel = np.array([y,x])
             dist = np.linalg.norm(pixel-center_pixel)
             distance_matrix[y][x] = dist
-              
+            
+    #reduce dimensionality of matrices to run polynomial fit              
     arr_x = distance_matrix.flatten()
     
     bands = {'R' : avg_R_smoothed, 'G' : avg_G_smoothed, 'B' : avg_B_smoothed}
     for band in bands:
        arr_y = bands.get(band).flatten()
-
        #compute polynomial
        print("fitting polynomial")
        z_3 = np.polyfit(arr_x, arr_y, 3)
        p_3 = np.poly1d(z_3)
+       
        #xp = np.linspace(0, width, 100)
        #plt.plot(arr_x, arr_y, '.', label = 'Uncorrected DNs')
        #plt.plot( xp, p_3(xp), '-', label = '3rd order polynomial fit')
        #plt.show()
 
-        #generate vignette mask
+       #generate vignette mask
        print("generating vignette mask")
        vignette_mask = np.zeros((height, width))
        for y in range(0, height):
@@ -384,6 +435,23 @@ def create_vignette_masks(path_to_raw_vignette_images):
 
 
 def vignette_correction(mask_dir, path_to_tiff):
+    
+    """
+    Applies vignette masks to .tiff image
+
+    Parameters
+    ----------
+    mask_dir : string
+        path to directory containing vignette masks
+        
+    path_to_tiff : string
+        path to tiff image
+    
+    Returns
+    -------
+    result : [float],[float],[float]
+        red, green, and blue float arrays corrected with vignette masks
+    """
     
     red_mask = Image.open(mask_dir + 'avg_R_smoothed_mask.tiff')
     red_mask = np.array(red_mask)
