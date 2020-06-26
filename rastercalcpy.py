@@ -108,12 +108,17 @@ correction_factor = np.divide( np.cos( slope_rad ) * np.cos( solar_zenith_rad ) 
 
 topo_correction = np.divide(warped_ortho_array, (numpy.multiply (correction_factor, direct_proportion*incoming_irradiance) + (1 - direct_proportion)*incoming_irradiance))
 
+topo_correction[topo_correction > 1] = 0
+topo_correction[topo_correction < 0] = 0
+
+
+
 #Write the out file
 driver = gdal.GetDriverByName("GTiff")
 dsOut = driver.Create('C:/Users/aman3/Documents/GradSchool/testing/ortho/DJI_0726_topo.tif', int(aspect_XSize), int(aspect_YSize[0]), 1, gdalconst.GDT_Float32)
 CopyDatasetInfo(ds1,dsOut)
 bandOut = dsOut.GetRasterBand(1)
-BandWriteArray(bandOut, topo_correction)
+BandWriteArray(bandOut, topo_correction[0])
 
 #Close the datasets
 dsOut = None
