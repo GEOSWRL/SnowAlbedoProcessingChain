@@ -6,26 +6,8 @@ Created on Fri Jun 19 08:47:48 2020
 """
 
 
-import rawpy
-import imageio
-import os
-import rasterio
-import shutil
-import exifread
-import pandas as pd
-import pytz
-from datetime import datetime
+
 import numpy as np
-import matplotlib.pyplot as plt
-from PIL import Image
-import scipy.ndimage as ndimage
-import exiftool
-import dateutil
-from pytz import timezone
-from rasterio.plot import show
-import math
-import arcgis
-import sys
 from osgeo import gdal, gdalconst
 import struct
 from osgeo.gdalnumeric import *
@@ -92,25 +74,9 @@ warped_ortho_array = BandReadAsArray(warped_ortho_band)
 aspect_array = BandReadAsArray(aspect_band)
 slope_array = BandReadAsArray(slope_band)
 
-#Apply correction
-slope_rad = np.radians(slope_array)
-aspect_rad = np.radians(aspect_array)
+#calculation
 
-direct_proportion = 0.5
-incoming_irradiance = 65535
-solar_zenith_angle = 66
-solar_azimuth_angle = 123
-
-solar_zenith_rad = np.radians(solar_zenith_angle)
-solar_azimuth_rad = np.radians(solar_azimuth_angle)
-
-correction_factor = np.divide( np.cos( slope_rad ) * np.cos( solar_zenith_rad ) + np.multiply(np.sin( solar_zenith_rad ) * np.sin( slope_rad ), np.cos(solar_azimuth_rad - aspect_rad)), np.cos(solar_zenith_rad))
-
-topo_correction = np.divide(warped_ortho_array, (numpy.multiply (correction_factor, direct_proportion*incoming_irradiance) + (1 - direct_proportion)*incoming_irradiance))
-
-topo_correction[topo_correction > 1] = 0
-topo_correction[topo_correction < 0] = 0
-
+calculated = np.divide(rasterA, rasterB)
 
 
 #Write the out file
