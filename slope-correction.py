@@ -32,6 +32,7 @@ import sys
 from osgeo import gdal, gdalconst
 import struct
 from osgeo.gdalnumeric import *
+import pvlib
 
 path_to_dem =  'C:/Users/aman3/Documents/GradSchool/testing/50mDEM.tif'
 path_to_output = 'C:/Users/aman3/Documents/GradSchool/testing/50m'
@@ -46,22 +47,56 @@ df = pd.read_csv(path_to_log)
 df.set_index('Image ID', inplace = True)
 
 
-def get_incidence_angle(topocentric_zenith_angle, slope, slope_orientation, topocentric_azimuth_angle):
-    tza_rad = math.radians(topocentric_zenith_angle)
-    slope_rad = math.radians(slope)
-    so_rad = math.radians(slope_orientation)
-    taa_rad = math.radians(topocentric_azimuth_angle)
-    return math.degrees(math.acos(math.cos(tza_rad) * math.cos(slope_rad) + math.sin(slope_rad) * math.sin(tza_rad) * math.cos(taa_rad - so_rad)))
+def process_DEM(path_to_dem, path_to_slope, path_to_aspect):
+    """
+    Creates slope and aspect rasters given a DEM
 
-def process_DEM(path_to_dem, path_to_output):
-    gdal.DEMProcessing(path_to_output +'slope.tif', path_to_dem, 'slope')
-    gdal.DEMProcessing(path_to_output + 'aspect.tif', path_to_dem, 'aspect')
-
-def run_radiative_transfer(df):
+    Parameters
+    ----------
+    path_to_dem : string
+        path to dem raster, must be a .tif
+        
+    path_to_slope : string
+        desired output path for slope raster, must end in .tif
     
-    DIP = []
+    path_to_aspect : string
+        desired output path for aspect raster, must end in .tif
+    
+    Returns
+    -------
+    result : null
+        creates files at specified paths
+
+    """
+    
+    gdal.DEMProcessing(path_to_slope, path_to_dem, 'slope')
+    gdal.DEMProcessing(path_to_aspect + 'aspect.tif', path_to_dem, 'aspect')
+    return
+    
+def run_radiative_transfer(path_to_log):
+    """
+    Runs 6s radiative transfer model to calculate solar zenith, azimuth, and proportion direct irradiance 
+    given the latitude, longitude, and altitude of the UAV.
+
+    Parameters
+    ----------
+    path_to_log : string
+        path to image_data .csv file
+    
+    Returns
+    -------
+    result : null
+        creates new data entries in image data .csv file
+
+    """
+    
+    df = pd.read_csv(path_to_log)
+    df.set_index('Image ID', inplace = True)
+    
+    DIP = [] # direct irradiance proportion
     solar_zenith = []
     solar_azimuth = []
+    et_irr = []
 
     for index, row in df.iterrows():
         lat = row['GPSLatitude']
@@ -69,26 +104,53 @@ def run_radiative_transfer(df):
         alt = row['GPSAltitude']/1000
         dt = row['Timestamp']
         dt = dateutil.parser.parse(dt, dayfirst=True)
-        dt = str(dt.astimezone(timezone('gmt')))
-    
+        dt_str = str(dt.astimezone(timezone('gmt')))
+        
+        
         s = SixS()
-        s.wavelength = Wavelength(0.31, 2.7)
-        s.altitudes.set_sensor_custom_altitude(alt)
-        s.geometry.from_time_and_location(lat, lon, dt, 0, 0)
+        s.wavelength = Wavelength(0.31, 2.7) #Kipp and Zonen Pr1 pyranometer bandwidth
+        s.altitudes.set_target_custom_altitude(alt)
+        s.geometry.from_time_and_location(lat, lon, dt_str, 0, 0)
         s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
         s.atmos_profile = AtmosProfile.PredefinedType(AtmosProfile.MidlatitudeWinter)
         s.run()
-
+        
+        et = pvlib.irradiance.get_extra_radiation(dt, solar_constant=1366.1, method='spencer', epoch_year=2020)
+        
+        et_irr.append(et)        
         DIP.append(s.outputs.percent_direct_solar_irradiance)
         solar_zenith.append(s.outputs.solar_z)
         solar_azimuth.append(s.outputs.solar_a)
-    
+        
+    df['Extraterrestrial_irradiance'] = et_irr
     df['Direct_Irradiance_Proportion'] = DIP
     df['Solar_Zenith_Angle'] = solar_zenith
     df['Solar_Azimuth_Angle'] = solar_azimuth
     df.to_csv(path_to_log)
+    
+    return 
 
 def prep_calc(filename, path_to_ortho, path_to_slope, path_to_aspect, path_to_output):
+    """
+    Creates slope and aspect rasters given a DEM
+
+    Parameters
+    ----------
+    path_to_dem : string
+        path to dem raster, must be a .tif
+        
+    path_to_slope : string
+        desired output path for slope raster, must end in .tif
+    
+    path_to_aspect : string
+        desired output path for aspect raster, must end in .tif
+    
+    Returns
+    -------
+    result : null
+        creates files at specified paths
+
+    """
     #open orthophoto and extract information
     ortho = gdal.Open(path_to_ortho, gdalconst.GA_ReadOnly)
     ortho_proj = ortho.GetProjection() 
@@ -122,6 +184,26 @@ def prep_calc(filename, path_to_ortho, path_to_slope, path_to_aspect, path_to_ou
     return dst_filename
     
 def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
+    """
+    Creates slope and aspect rasters given a DEM
+
+    Parameters
+    ----------
+    path_to_dem : string
+        path to dem raster, must be a .tif
+        
+    path_to_slope : string
+        desired output path for slope raster, must end in .tif
+    
+    path_to_aspect : string
+        desired output path for aspect raster, must end in .tif
+    
+    Returns
+    -------
+    result : null
+        creates files at specified paths
+
+    """
     df = pd.read_csv(path_to_log)
     df.set_index('Image ID', inplace = True)
     
@@ -136,24 +218,30 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
     
     for filename in os.listdir(ortho_dir):
             if (filename.endswith('.tif')):
-                
+                print('warping ' + filename)
                 warped_ortho = prep_calc(filename, ortho_dir + filename, path_to_slope, path_to_aspect, output_dir)
                 
+                print('extracting values from image data file')
+                #extract pertinent information from image data csv file
                 solar_zenith_angle = df.loc[filename[:-4]+'.DNG']['Solar_Zenith_Angle']
                 solar_azimuth_angle = df.loc[filename[:-4]+'.DNG']['Solar_Azimuth_Angle']
                 direct_proportion = df.loc[filename[:-4]+'.DNG']['Direct_Irradiance_Proportion']
+                extraterrestrial_irradiance = df.loc[filename[:-4]+'.DNG']['Extraterrestrial_irradiance']
+                
+                
                 incoming_irradiance = 65535
                 
-                outFile = output_dir + filename [:-4] + '_topographic.tif'
+                print('calculating parameters')
+                
+                incoming_diffuse = incoming_irradiance * (1-direct_proportion)
+                
+                outFile = output_dir + filename [:-4] + '_topographic.tif' #output filepath
 
                 #Open the warped orthophoto
                 ds1 = gdal.Open(warped_ortho, gdalconst.GA_ReadOnly)
                 warped_ortho_band = ds1.GetRasterBand(1)
 
                 #Read the data into numpy arrays
-                
-                
-                
                 warped_ortho_array = BandReadAsArray(warped_ortho_band)
                 aspect_array = BandReadAsArray(aspect_band)
                 slope_array = BandReadAsArray(slope_band)
@@ -161,15 +249,52 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 #Apply correction
                 slope_rad = np.radians(slope_array)
                 aspect_rad = np.radians(aspect_array)
-                
-
                 solar_zenith_rad = np.radians(solar_zenith_angle)
                 solar_azimuth_rad = np.radians(solar_azimuth_angle)
-
+                solar_altitude_rad = np.pi/2 - solar_zenith_rad
+                
+                
+                
+                incidence_angle = np.arccos(np.cos( slope_rad ) * np.cos( solar_zenith_rad ) + np.multiply(np.sin( solar_zenith_rad ) * np.sin( slope_rad ), np.cos(solar_azimuth_rad - aspect_rad)))
+                
+                a = np.maximum(0, np.cos(incidence_angle))
+                b = np.maximum(0.087, np.cos(solar_zenith_rad))
+                
+                relative_oa = np.divide(1, [np.sin(solar_altitude_rad) + np.power(0.15*(solar_altitude_rad + 3.885), 1.253)])
+                delta = np.multiply(incoming_diffuse, np.divide(relative_oa, 70000))
+                F1 = np.add(np.add(0.568, np.multiply(0.187, delta)), np.multiply(-0.295, solar_zenith_rad))
+                F2 = np.add(np.add(0.109, np.multiply(-.152, delta)), np.multiply(-0.014, solar_zenith_rad))
+                #F2 = 0.109 + (-.152) * delta + (-0.014 *solar_zenith_rad)
+                
+                print(' running diffuse correction')
+                diffuse_corrected = np.multiply(incoming_diffuse, np.add(np.multiply((1-F1), np.divide(np.add(1, np.cos(slope_rad)),2)), np.add(np.multiply(F1, np.divide(a,b)), np.multiply(F2, np.sin(slope_rad)))))
+                
                 correction_factor = np.divide( np.cos( slope_rad ) * np.cos( solar_zenith_rad ) + np.multiply(np.sin( solar_zenith_rad ) * np.sin( slope_rad ), np.cos(solar_azimuth_rad - aspect_rad)), np.cos(solar_zenith_rad))
 
-                topo_correction = np.divide(warped_ortho_array, (np.multiply (correction_factor, direct_proportion*incoming_irradiance) + (1 - direct_proportion)*incoming_irradiance))
-
+                print('applying direct correction')
+                topo_correction = np.divide(warped_ortho_array, (np.multiply (correction_factor, direct_proportion*incoming_irradiance) + diffuse_corrected))
+                
+                """
+                diffuse_correction
+                X = Xh[(1-F1)(1+cos(S))/2 + F1a/b +F2sinS]
+                
+                X = irradiance recieved
+                #F1 and F2 are coefficients expressing the degree of circumsolar and horizon/zenith anisotropy
+                delta = diffuse_horizontal * relative optical airmass / extraterrestrial irradiance
+                relative optical airmass = 1/[sin (solar_altitude_rad) + a (solar_altitude_rad + b) ^ -c] in which a = 0.1500, b = 3.885, c = 1.253
+                solar_altidtude = math.PI/2 - solar_zenith_rad
+                extraterrestrial_irradiance = df.loc[filename[:-4]+'.DNG']['Extraterrestrial_irradiance']
+                assuming bin 4 from Perez et al.
+                F1 = 0.568 + 0.187 * delta + (-0.295 * zenith angle)
+                F2 = 0.109 + (-.152) * delta + (-0.014 * zenith angle) 
+                S = slope
+                a = max(0, cos(incidence_angle))
+                b = max(0.087, cosZ)
+                z = zenith_angle
+                
+                
+                """
+                #filter erroneous results from raster matrix
                 topo_correction[topo_correction > 1] = 0
                 topo_correction[topo_correction < 0] = 0
 
@@ -181,10 +306,11 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 CopyDatasetInfo(ds1,dsOut)
                 bandOut = dsOut.GetRasterBand(1)
                 BandWriteArray(bandOut, topo_correction)
+                bandOut.SetNoDataValue(0)
                 
                 #Close the datasets
                 dsOut = None
-                
-    
+                print('corrected')
+#run_radiative_transfer(path_to_log)
 run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_corrected)
 
