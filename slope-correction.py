@@ -260,14 +260,14 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 a = np.maximum(0, np.cos(incidence_angle))
                 b = np.maximum(0.087, np.cos(solar_zenith_rad))
                 
-                relative_oa = np.divide(1, [np.sin(solar_altitude_rad) + np.power(0.15*(solar_altitude_rad + 3.885), 1.253)])
+                relative_oa = np.divide(1, np.sin(solar_altitude_rad) + np.power(0.15*(solar_altitude_rad + 3.885), 1.253))
                 delta = np.multiply(incoming_diffuse, np.divide(relative_oa, 70000))
                 F1 = np.add(np.add(0.568, np.multiply(0.187, delta)), np.multiply(-0.295, solar_zenith_rad))
                 F2 = np.add(np.add(0.109, np.multiply(-.152, delta)), np.multiply(-0.014, solar_zenith_rad))
                 #F2 = 0.109 + (-.152) * delta + (-0.014 *solar_zenith_rad)
                 
-                print(' running diffuse correction')
-                diffuse_corrected = np.multiply(incoming_diffuse, np.add(np.multiply((1-F1), np.divide(np.add(1, np.cos(slope_rad)),2)), np.add(np.multiply(F1, np.divide(a,b)), np.multiply(F2, np.sin(slope_rad)))))
+                print('running diffuse correction')
+                diffuse_corrected = np.multiply(incoming_diffuse, np.add(np.multiply((np.subtract(1,F1)), np.divide(np.add(1, np.cos(slope_rad)),2)), np.add(np.multiply(F1, np.divide(a,b)), np.multiply(F2, np.sin(slope_rad)))))
                 
                 correction_factor = np.divide( np.cos( slope_rad ) * np.cos( solar_zenith_rad ) + np.multiply(np.sin( solar_zenith_rad ) * np.sin( slope_rad ), np.cos(solar_azimuth_rad - aspect_rad)), np.cos(solar_zenith_rad))
 
