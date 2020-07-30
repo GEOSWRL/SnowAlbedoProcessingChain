@@ -9,11 +9,11 @@ import pandas as pd
 import pytz
 
 
-paths_to_DJI = ['C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/flight_logs/50m.csv','C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/flight_logs/100m.csv']
-path_to_Meteon = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/Pyranometers/YC20200219_pyranometers.csv'
+paths_to_DJI = ['C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/logs/FLY164.csv','C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/logs/FLY166.csv']
+path_to_Meteon = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/logs/Meteon_20200702.csv'
 
 angle_tolerance = 5 #degree threshold of tilt and roll, angles greater than this will be filtered out
-height_tolerance = 10 #records below this relative altitude(m) will be filtered out
+height_tolerance = 2 #records below this relative altitude(m) will be filtered out
 
 def parse_DJI(paths_to_DJI):
     """

@@ -11,12 +11,8 @@ topographic correction
 """
 
 """
-steps
-
-
-4: For each orthophoto from orthomosaic
-    a: overlay on slope - azimuth map to generate slope - azimuth of orthophoto
-    b: take synchronous radiometer measurements to generate slope corrections
+This script utilizes py6s, a python wrapper for the 6s radiative transfer function, which is written in FORTRAN
+    #pip install Py6s
     
 """
 import math
@@ -38,7 +34,7 @@ path_to_output = 'C:/Users/aman3/Documents/GradSchool/testing/50m'
 path_to_orthophotos = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/'
 path_to_warped = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/warped/'
 path_to_corrected = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/corrected/'
-path_to_log = 'C:/Users/aman3/Documents/GradSchool/testing/data/imageData.csv'
+path_to_log = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/processing/Fly164_imageData.csv'
 path_to_slope = 'C:/Users/aman3/Documents/GradSchool/testing/50mSlope.tif'
 path_to_aspect = 'C:/Users/aman3/Documents/GradSchool/testing/50mAspect.tif'
 
@@ -62,30 +58,48 @@ def run_radiative_transfer(df):
     DIP = []
     solar_zenith = []
     solar_azimuth = []
+    global_downwelling = []
 
     for index, row in df.iterrows():
         lat = row['GPSLatitude']
         lon = row['GPSLongitude']
         alt = row['GPSAltitude']/1000
+        
         dt = row['Timestamp']
         dt = dateutil.parser.parse(dt, dayfirst=True)
         dt = str(dt.astimezone(timezone('gmt')))
     
         s = SixS()
-        s.wavelength = Wavelength(0.31, 2.7)
-        s.altitudes.set_sensor_custom_altitude(alt)
+        
         s.geometry.from_time_and_location(lat, lon, dt, 0, 0)
+        
+        s.altitudes.set_target_custom_altitude(alt - 0.05)
+        
         s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
-        s.atmos_profile = AtmosProfile.PredefinedType(AtmosProfile.MidlatitudeWinter)
+        
+        #s.atmos_profile = AtmosProfile.PredefinedType(AtmosProfile.MidlatitudeSummer)
+        s.atmos_profile = AtmosProfile.FromLatitudeAndDate(lat, dt)
+        
+        s.wavelength = Wavelength(0.31, 2.7)
+        
+        s.visibility = None
+        
+        s.aot550 = 0.235
+        
         s.run()
 
         DIP.append(s.outputs.percent_direct_solar_irradiance)
         solar_zenith.append(s.outputs.solar_z)
         solar_azimuth.append(s.outputs.solar_a)
-    
+        #s.outputs.int_solar_spectrum
+        print(s.outputs.direct_solar_irradiance)
+        print('6s downwelling irradiance: ' + str((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*2.39) + ', pyranometer downwelling irradiance: ' + str(row['Downwelling Irradiance']))
+        global_downwelling.append((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*2.39)
+        
     df['Direct_Irradiance_Proportion'] = DIP
     df['Solar_Zenith_Angle'] = solar_zenith
     df['Solar_Azimuth_Angle'] = solar_azimuth
+    df['6s_Global_Downwelling_Irradiance'] = global_downwelling
     df.to_csv(path_to_log)
 
 def prep_calc(filename, path_to_ortho, path_to_slope, path_to_aspect, path_to_output):
@@ -185,6 +199,6 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 #Close the datasets
                 dsOut = None
                 
-    
-run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_corrected)
+run_radiative_transfer(df)
+#run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_corrected)
 

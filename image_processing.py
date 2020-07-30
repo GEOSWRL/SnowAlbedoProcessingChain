@@ -9,7 +9,6 @@ import rawpy
 import imageio
 import os
 import rasterio
-import shutil
 import exifread
 import pandas as pd
 import pytz
@@ -20,16 +19,25 @@ from PIL import Image
 import scipy.ndimage as ndimage
 import exiftool
 
-path_to_temp = 'C:/Users/aman3/Documents/GradSchool/testing/temp/'
-path_to_raw_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-path_to_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-path_to_tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-path_to_output = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-path_to_log = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_merged.csv'
-path_to_exif = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_exif.csv'
-path_to_raw_vignette_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/'
-vignette_mask_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/filters/'
+#path_to_temp = 'C:/Users/aman3/Documents/GradSchool/testing/temp/'
+path_to_raw_images = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/imagery/'
+path_to_images = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/imagery/'
+path_to_tiffs = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/processing/tiff/'
+path_to_output = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/processing/'
+path_to_log = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/logs/FLY164_merged.csv'
+#path_to_exif = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_exif.csv'
+#path_to_raw_vignette_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/'
+vignette_mask_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/utils/vignette_masks/'
+vignette_corrected = 'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/processing/vignette_corrected/'
 EXIFTOOL_PATH = 'C:/exiftool'
+
+
+"""
+Dowload exiftool by Phil Harvey from https://exiftool.org/
+    #Extract Windows Executable to path specified by EXIFTOOL_PATH variable in this script
+    #Rename executable (saves as "exiftool(-k)") to "exiftool"
+    #pip install pyexiftool
+"""
 
 
 def create_geotiff (out_path, dataset):
@@ -163,7 +171,7 @@ def split_rgb(tiff_image):
    
     return red, green, blue
     
-def avg_rgb(tiff_image, out_dir):
+def avg_rgb(tiff_image, file_dir, out_dir):
     """
     Takes the average of red, green, and blue arrays and saves to new tiff
 
@@ -190,7 +198,7 @@ def avg_rgb(tiff_image, out_dir):
     out_path = out_dir + tiff_image
     
     #split .tiff into r,g,b bands
-    red, green, blue = split_rgb(tiff_image)
+    red, green, blue = split_rgb(file_dir+tiff_image)
     
     #average of all 3 bands
     avg = ((red + green + blue)/3).astype('uint16')
@@ -274,11 +282,12 @@ def read_EXIF(path_to_images, path_to_output):
         
     """
     
-    df = pd.DataFrame(columns = ['Image ID', 'Timestamp', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Pitch', 'Roll', 'Yaw', 'Downwelling Irradiance', 'Upwelling Irradiance', 'Albedo'])
+    df = pd.DataFrame(columns = ['Image ID', 'Timestamp', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Relative Height', 'Pitch', 'Roll', 'Yaw', 'Downwelling Irradiance', 'Upwelling Irradiance', 'Albedo'])
 
     with exiftool.ExifTool(EXIFTOOL_PATH) as et:
         for filename in os.listdir(path_to_images):
             if filename.endswith(".DNG"):
+                
                 metadata = et.get_metadata_batch([path_to_images + filename])[0]  
                 
                 Timestamp = metadata['EXIF:CreateDate']
@@ -291,6 +300,7 @@ def read_EXIF(path_to_images, path_to_output):
                 df2 = pd.read_csv(path_to_log)
                 
                 #extract albedo value associated with image
+                
                 row = df2.loc[df2['key_0'] == str(Timestamp)].index
                     
                 if(row.values.size == 0):
@@ -299,20 +309,21 @@ def read_EXIF(path_to_images, path_to_output):
                     downwelling = float(df2.iloc[row]['incoming (W/m^2)'].values)
                     upwelling = float(df2.iloc[row]['reflected (W/m^2)'].values)
                     albedo = float(df2.iloc[row]['albedo'].values)
+                    Relative_Height = float(df2.iloc[row]['General:relativeHeight'].values)
+                    
+                    GPSLongitude = metadata['Composite:GPSLongitude']
+                    GPSLatitude = metadata['Composite:GPSLatitude']
+                    GPSAltitude = metadata['Composite:GPSAltitude']
+                    Pitch = metadata['MakerNotes:CameraPitch'] + 90
                 
-                GPSLongitude = metadata['Composite:GPSLongitude']
-                GPSLatitude = metadata['Composite:GPSLatitude']
-                GPSAltitude = metadata['Composite:GPSAltitude']
-                Pitch = metadata['MakerNotes:CameraPitch'] + 90
+                    if (metadata['MakerNotes:CameraYaw']>=0):
+                        Yaw = metadata['MakerNotes:CameraYaw']
+                    else:
+                        Yaw = 360 + metadata['MakerNotes:CameraYaw']
                 
-                if (metadata['MakerNotes:CameraYaw']>=0):
-                    Yaw = metadata['MakerNotes:CameraYaw']
-                else:
-                    Yaw = 360 + metadata['MakerNotes:CameraYaw']
-                
-                Roll = metadata['MakerNotes:CameraRoll']            
-                
-                df = df.append(pd.Series([filename, Timestamp, GPSLatitude, GPSLongitude, GPSAltitude,
+                    Roll = metadata['MakerNotes:CameraRoll'] 
+                    
+                    df = df.append(pd.Series([filename, Timestamp, GPSLatitude, GPSLongitude, GPSAltitude, Relative_Height,
                                       Pitch, Roll, Yaw, downwelling, upwelling, albedo], index=df.columns), ignore_index = True)
 
     df.set_index('Image ID', inplace = True)
@@ -470,21 +481,28 @@ def vignette_correction(mask_dir, path_to_tiff):
     
     return corrected_red, corrected_green, corrected_blue
 
-tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-filtered = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/vignette_correction/'
-raw = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-exif = 'C:/Users/aman3/Documents/GradSchool/testing/output/'
+
+
+
+
+
 
 """
-for filename in os.listdir(raw):  
-    if filename.endswith(".DNG"):
-        raw_to_tiff(filename, path_to_output)  
+read_EXIF(path_to_raw_images, path_to_output)
+"""
 
-"""   
-for filename in os.listdir(tiffs):  
+"""
+for filename in os.listdir(path_to_raw_images):  
+    if filename.endswith(".DNG"):
+        raw_to_tiff(filename)  
+"""
+
+for filename in os.listdir(path_to_tiffs):  
     if filename.endswith(".tiff"):
-        r,g,b = vignette_correction(vignette_mask_dir, tiffs+filename)
-        avg_rgb(r, g, b, filename, filtered)  
+        file_dir = path_to_tiffs
+        avg_rgb(filename, file_dir,'C:/Masters/DroneAlbedoProject/Field_Data/BART/BART20200702/processing/avg')  
+
+
 
 
 
