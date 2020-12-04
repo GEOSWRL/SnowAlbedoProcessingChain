@@ -21,14 +21,15 @@ import scipy.ndimage as ndimage
 import exiftool
 
 path_to_temp = 'C:/Users/aman3/Documents/GradSchool/testing/temp/'
-path_to_raw_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-path_to_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-path_to_tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-path_to_output = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-path_to_log = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_merged.csv'
+path_to_raw_images = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/imagery/DJI_0535/50m/'
+
+path_to_tiffs = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/raw_tiff/'
+path_to_output = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/'
+path_to_log = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/flight_logs/50m_merged.csv'
 path_to_exif = 'C:/Users/aman3/Documents/GradSchool/testing/data/50m_exif.csv'
 path_to_raw_vignette_images = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/'
-vignette_mask_dir = 'C:/Users/aman3/Documents/GradSchool/testing/data/vignette/out/filters/'
+vignette_mask_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/utils/vignette_masks/'
+
 EXIFTOOL_PATH = 'C:/exiftool'
 
 
@@ -163,7 +164,7 @@ def split_rgb(tiff_image):
    
     return red, green, blue
     
-def avg_rgb(tiff_image, out_dir):
+def avg_rgb(red, green, blue, out_dir, tiff_image):
     """
     Takes the average of red, green, and blue arrays and saves to new tiff
 
@@ -190,7 +191,7 @@ def avg_rgb(tiff_image, out_dir):
     out_path = out_dir + tiff_image
     
     #split .tiff into r,g,b bands
-    red, green, blue = split_rgb(tiff_image)
+   # red, green, blue = split_rgb(tiff_image)
     
     #average of all 3 bands
     avg = ((red + green + blue)/3).astype('uint16')
@@ -226,7 +227,7 @@ def broadband_correction(raw_image, path_to_log, tiff):
         path to corrected tiff file
     """
     #open raw image and extract timestamp
-    raw = open(path_to_images + raw_image, 'rb')
+    raw = open(path_to_raw_images + raw_image, 'rb')
     tags = exifread.process_file(raw)
     dateTime_str = (str(tags['Image DateTime']))
 
@@ -255,13 +256,13 @@ def broadband_correction(raw_image, path_to_log, tiff):
     
     return corrected_tiff
     
-def read_EXIF(path_to_images, path_to_output):
+def read_EXIF(path_to_raw_images, path_to_output):
     """
     Reads EXIF data from DJI images and creates a text file with GPS fields for use in Agisoft
 
     Parameters
     ----------
-    path_to_images : string
+    path_to_raw_images : string
         path to DJI images
         
     path_to_output : string
@@ -277,9 +278,9 @@ def read_EXIF(path_to_images, path_to_output):
     df = pd.DataFrame(columns = ['Image ID', 'Timestamp', 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Pitch', 'Roll', 'Yaw', 'Downwelling Irradiance', 'Upwelling Irradiance', 'Albedo'])
 
     with exiftool.ExifTool(EXIFTOOL_PATH) as et:
-        for filename in os.listdir(path_to_images):
+        for filename in os.listdir(path_to_raw_images):
             if filename.endswith(".DNG"):
-                metadata = et.get_metadata_batch([path_to_images + filename])[0]  
+                metadata = et.get_metadata_batch([path_to_raw_images + filename])[0]  
                 
                 Timestamp = metadata['EXIF:CreateDate']
                 YMD = datetime.strptime(Timestamp[:10], '%Y:%m:%d')
@@ -299,11 +300,12 @@ def read_EXIF(path_to_images, path_to_output):
                     downwelling = float(df2.iloc[row]['incoming (W/m^2)'].values)
                     upwelling = float(df2.iloc[row]['reflected (W/m^2)'].values)
                     albedo = float(df2.iloc[row]['albedo'].values)
-                
+                    UAV_pitch = float(df2.iloc[row]['IMU_ATTI(0):pitch'].values)
+                    UAV_roll = float(df2.iloc[row]['IMU_ATTI(0):roll'].values)
                 GPSLongitude = metadata['Composite:GPSLongitude']
                 GPSLatitude = metadata['Composite:GPSLatitude']
                 GPSAltitude = metadata['Composite:GPSAltitude']
-                Pitch = metadata['MakerNotes:CameraPitch'] + 90
+                #Pitch = metadata['MakerNotes:CameraPitch'] + 90
                 
                 if (metadata['MakerNotes:CameraYaw']>=0):
                     Yaw = metadata['MakerNotes:CameraYaw']
@@ -312,8 +314,8 @@ def read_EXIF(path_to_images, path_to_output):
                 
                 Roll = metadata['MakerNotes:CameraRoll']            
                 
-                df = df.append(pd.Series([filename, Timestamp, GPSLatitude, GPSLongitude, GPSAltitude,
-                                      Pitch, Roll, Yaw, downwelling, upwelling, albedo], index=df.columns), ignore_index = True)
+                df = df.append(pd.Series([filename[:-3] + 'tiff', Timestamp, GPSLatitude, GPSLongitude, GPSAltitude,
+                                      UAV_pitch, UAV_roll, Yaw, downwelling, upwelling, albedo], index=df.columns), ignore_index = True)
 
     df.set_index('Image ID', inplace = True)
     df.to_csv(path_to_output + 'imageData.csv')
@@ -470,21 +472,57 @@ def vignette_correction(mask_dir, path_to_tiff):
     
     return corrected_red, corrected_green, corrected_blue
 
-tiffs = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/plain_tiff/'
-filtered = 'C:/Users/aman3/Box/Masters/field_data/YC/YC20200219/GPHY591_project/vignette_correction/'
-raw = 'C:/Users/aman3/Documents/GradSchool/testing/data/'
-exif = 'C:/Users/aman3/Documents/GradSchool/testing/output/'
 
 """
-for filename in os.listdir(raw):  
+for filename in os.listdir(path_to_raw_images):  
     if filename.endswith(".DNG"):
-        raw_to_tiff(filename, path_to_output)  
+        raw_to_tiff(filename)  
+"""
 
-"""   
-for filename in os.listdir(tiffs):  
+#read_EXIF(path_to_raw_images, path_to_output)
+
+avg_corrected_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/vignette_corrected/avg/'
+red_corrected_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/vignette_corrected/red/'
+green_corrected_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/vignette_corrected/green/'
+blue_corrected_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/vignette_corrected/blue/'
+rgb_corrected_dir = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/vignette_corrected/rgb/'
+
+read_EXIF(path_to_raw_images, path_to_output)
+"""
+for filename in os.listdir(path_to_tiffs):  
     if filename.endswith(".tiff"):
-        r,g,b = vignette_correction(vignette_mask_dir, tiffs+filename)
-        avg_rgb(r, g, b, filename, filtered)  
+        r,g,b = vignette_correction(vignette_mask_dir, path_to_tiffs+filename)
+        r = r.astype('uint16')
+        g = g.astype('uint16')
+        b = b.astype('uint16')
+"""
 
-
-
+"""       
+        new_dataset = rasterio.open(
+        rgb_corrected_dir + filename,
+        'w',
+        driver='GTiff',
+        height=r.shape[0],
+        width=r.shape[1],
+        count=3,
+        dtype=r.dtype
+        )
+        new_dataset.write_band(1,r)
+        new_dataset.write_band(2,g)
+        new_dataset.write_band(3,b)
+        new_dataset.close()
+        
+        
+"""
+"""       
+        create_geotiff(red_corrected_dir + 'R_' + filename, r.astype('uint16'))
+        print(r.astype('uint16'))
+        create_geotiff(green_corrected_dir + 'G_' + filename, g.astype('uint16'))
+        create_geotiff(blue_corrected_dir + 'B_' + filename, b.astype('uint16'))  
+"""
+"""
+for filename in os.listdir(path_to_tiffs):  
+    if filename.endswith(".tiff"):
+        r,g,b = vignette_correction(vignette_mask_dir, path_to_tiffs+filename)
+        avg_rgb(r, g, b, avg_corrected_dir, filename)  
+"""
