@@ -5,20 +5,7 @@ Created on Fri May 22 16:20:59 2020
 @author: aman3
 """
 
-"""
-topographic correction
 
-"""
-
-"""
-steps
-
-
-4: For each orthophoto from orthomosaic
-    a: overlay on slope - azimuth map to generate slope - azimuth of orthophoto
-    b: take synchronous radiometer measurements to generate slope corrections
-    
-"""
 import math
 import gdal
 from Py6S import *
@@ -35,15 +22,22 @@ from osgeo.gdalnumeric import *
 from sklearn.linear_model import LinearRegression
 import matplotlib.pyplot as plt
 from matplotlib import cm as CM
+import earthpy as et
 
-path_to_dem =  'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/YC20200219_DEM.tif'
-path_to_output = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/'
-path_to_orthophotos = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/ortho/'
+
+wd_path = os.path.join(et.io.HOME, 'Documents', 'SnowAlbedoProcessingChain', 'working_directory')
+
+print(et.io.HOME)
+path_to_dem =  os.path.join(wd_path, 'surface_models', 'elevation', os.listdir(os.path.join(wd_path, 'surface_models', 'elevation'))[0])
+path_to_output = et.io.HOME
+path_to_orthophotos = et.io.HOME
+path_to_tiffs = os.path.join(wd_path, 'imagery', 'TIFF')
 #path_to_warped = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/warped/'
 #path_to_corrected = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/corrected/'
-path_to_log = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/imageData.csv'
-path_to_slope = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/_slope.tif'
-path_to_aspect = 'C:/Masters/DroneAlbedoProject/Field_Data/YC/YC20200219/processing/_aspect.tif'
+path_to_log = os.path.join(path_to_tiffs, 'imageData50m.csv')
+#path_to_slope = et.io.HOME
+#path_to_aspect = et.io.HOME
+
 
 df = pd.read_csv(path_to_log)
 df.set_index('Image ID', inplace = True)
@@ -56,12 +50,29 @@ def get_incidence_angle(topocentric_zenith_angle, slope, slope_orientation, topo
     taa_rad = math.radians(topocentric_azimuth_angle)
     return math.degrees(math.acos(math.cos(tza_rad) * math.cos(slope_rad) + math.sin(slope_rad) * math.sin(tza_rad) * math.cos(taa_rad - so_rad)))
 
-def process_DEM(path_to_dem, path_to_output):
-    gdal.DEMProcessing(path_to_output +'_slope.tif', path_to_dem, 'slope')
-    gdal.DEMProcessing(path_to_output + '_aspect.tif', path_to_dem, 'aspect')
-
-def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltitude_fname, datetime_fname):
+def process_DEM(path_to_dem, path_to_slope = None, path_to_aspect = None):
+    #reproject DEM to UTM
     
+    processing_options = gdal.DEMProcessingOptions(alg = 'ZevenbergenThorne', slopeFormat = 'degree')
+    
+    if path_to_slope == None and path_to_aspect == None:
+        return
+    
+    elif path_to_slope != None and path_to_aspect == None:
+        gdal.DEMProcessing(path_to_slope, path_to_dem, 'slope', options = processing_options)
+        return
+    
+    elif path_to_slope == None and path_to_aspect != None:
+        gdal.DEMProcessing(path_to_aspect, path_to_dem, 'aspect', options = processing_options)
+        return
+    else:   
+        gdal.DEMProcessing(path_to_slope, path_to_dem, 'slope', options = processing_options)
+        gdal.DEMProcessing(path_to_aspect, path_to_dem, 'slope', options = processing_options)
+        return
+
+def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltitude_fname, datetime_fname, start_wavelength, end_wavelength):
+    #.31, 2.7 for PR1 pyranometers
+    bandwidth = end_wavelength-start_wavelength
     DIP = []
     solar_zenith = []
     solar_azimuth = []
@@ -81,7 +92,8 @@ def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltit
         #initiate 6s, set parameters, and run
         s = SixS()
         
-        s.wavelength = Wavelength(0.31, 2.7)
+        
+        s.wavelength = Wavelength(start_wavelength, end_wavelength)
         s.altitudes.set_target_custom_altitude(alt - 0.05)
         s.geometry.from_time_and_location(lat, lon, dt, 0, 0)
         s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
@@ -92,10 +104,8 @@ def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltit
         s.run()
 
         #append radiative transfer results to corresponding storage arrays
-        #print(s.outputs.direct_solar_irradiance)
-        #print('6s downwelling irradiance: ' + str((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*2.39) + ', pyranometer downwelling irradiance: ' + str(row['Downwelling Irradiance']))
-        
-        global_downwelling.append((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*2.39)
+           
+        global_downwelling.append((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*bandwidth)
         DIP.append(s.outputs.percent_direct_solar_irradiance)
         solar_zenith.append(s.outputs.solar_z)
         solar_azimuth.append(s.outputs.solar_a)
@@ -109,8 +119,6 @@ def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltit
     df['6s_modeled_global_irradiance'] = global_downwelling
     
     return df
-    #update csv
-    #df.to_csv(path_to_log)
 
 def prep_calc(filename, path_to_ortho, path_to_slope, path_to_aspect, path_to_output):
     #open orthophoto and extract information
@@ -377,10 +385,10 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 
                 #Close the datasets
                 dsOut = None
-#process_DEM(path_to_dem, path_to_output)            
+process_DEM(path_to_dem, path_to_slope = os.path.join(wd_path, 'surface_models', 'slope', 'slope.tiff'), path_to_aspect=(os.path.join(wd_path, 'surface_models', 'aspect', 'aspect.tiff')))         
 #run_radiative_transfer(df)
 #run_radiative_transfer(df, 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Timestamp')
 
 
-run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_output)
+#run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_output)
 

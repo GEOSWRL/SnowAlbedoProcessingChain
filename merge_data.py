@@ -3,20 +3,47 @@
 Created on Mon Feb 24 14:50:13 2020
 
 @author: Andrew Mullen
+
+
+conda install -c conda-forge earthpy
 """
 
 import pandas as pd
 import pytz
-import slope_correction
+import os
+import earthpy as ep
+
+#set working directory
+wd_path = os.path.join(ep.io.HOME, 'Documents', 'SnowAlbedoProcessingChain', 'working_directory')
+if not (os.path.exists(wd_path)):
+    print('working directory does not exist')
+
+#set paths to logfiles    
+paths_to_DJI = [os.path.join(wd_path,'logfiles', 'dji', f) for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
+path_to_Meteon = os.path.join(wd_path, 'logfiles', 'meteon', os.listdir(os.path.join(wd_path, 'logfiles', 'meteon'))[0])
 
 
-paths_to_DJI = ['C:/Masters/DroneAlbedoProject/Field_Data/tarp/09132020_parkingLot/flight_logs/FLY218.csv']
-path_to_Meteon = 'C:/Masters/DroneAlbedoProject/Field_Data/tarp/09132020_parkingLot/pyranometers/20200913_pyranometers.csv'
-
-angle_tolerance = 3 #degree threshold of tilt and roll, angles greater than this will be filtered out
+angle_tolerance = 5 #degree threshold of tilt and roll, angles greater than this will be filtered out
 height_tolerance = 0.3 #records below this relative altitude(m) will be filtered out
 
-def correct_tilt_direction(a):
+timezone = 'US/Mountain'
+
+
+
+def tilt_direction_to_azimuth(a):
+    """
+    Creates new Geotiff from numpy array
+
+    Parameters
+    ----------
+    a : integer angle from -180 to 180 degrees
+    
+    Returns
+    -------
+    a : angle corrected to 360 degree azimuth (clockwise from 0 degrees at North)
+
+    """
+    
     if(a<0):
         a+=360
         return a
@@ -33,8 +60,11 @@ def parse_DJI(paths_to_DJI):
     
     Returns
     -------
-    result : Pandas Dataframe
-        filetered DJI flight log file ready to be merged
+    dfs : list of Pandas Dataframes
+        DataFrames for filetered DJI flight logs file ready to be merged
+    
+    filenames : String
+        Filenames corresponding to DJI flight logs
 
     """
     dfs = []
@@ -48,30 +78,22 @@ def parse_DJI(paths_to_DJI):
         df = df.loc[(df['General:relativeHeight']>=height_tolerance) & (df['IMU_ATTI(0):roll']<=angle_tolerance) & (df['IMU_ATTI(0):roll']>=-angle_tolerance) & (df['IMU_ATTI(0):pitch']<=angle_tolerance) & (df['IMU_ATTI(0):pitch']>=-angle_tolerance)]
 
         #convert to mountain time
-        mountain = pytz.timezone('US/Mountain')
         df['GPS:dateTimeStamp'] = pd.DatetimeIndex(df['GPS:dateTimeStamp']).tz_localize(None)
         df['GPS:dateTimeStamp'] = pd.DatetimeIndex(df['GPS:dateTimeStamp']).tz_localize('Zulu')
-        df['GPS:dateTimeStamp'] = pd.DatetimeIndex(df['GPS:dateTimeStamp']).tz_convert(mountain)
+        df['GPS:dateTimeStamp'] = pd.DatetimeIndex(df['GPS:dateTimeStamp']).tz_convert(pytz.timezone(timezone))
     
         #flight logs collect on milliseconds, so we must average values over each second
         df = df.groupby(df['GPS:dateTimeStamp']).mean()
         
         #adjust tilt_Direction to 360 deg. azimuth
-        df['IMU_ATTI(0):tiltDirection'] = df['IMU_ATTI(0):tiltDirection'].apply(correct_tilt_direction)
-        
-        #run py6s radiative transfer
-        
-        df = slope_correction.run_radiative_transfer(df, 'GPS(0):Lat', 'GPS(0):Long', 'GPS(0):heightMSL', 'GPS:dateTimeStamp')
+        df['IMU_ATTI(0):tiltDirection'] = df['IMU_ATTI(0):tiltDirection'].apply(tilt_direction_to_azimuth)
         
         dfs.append(df)
         
-        #new dataframe with stabilized measurements
         
+    filenames = [f for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
         
-        
-    
-
-    return dfs
+    return dfs, filenames
     
 
 def parse_Meteon(path_to_Meteon):
@@ -89,7 +111,6 @@ def parse_Meteon(path_to_Meteon):
         filetered Meteon log file ready to be merged
 
     """    
-    mountain = pytz.timezone('US/Mountain')
     df = pd.read_csv(path_to_Meteon, usecols=[0,2,5], skiprows=9, names = ["Time", "incoming (W/m^2)", "reflected (W/m^2)"], parse_dates=True)
     #df = pd.read_csv(path_to_Meteon, usecols=[0,5,2], skiprows=9, names = ["Time", "reflected (W/m^2)", "incoming (W/m^2)"], parse_dates=True)
     
@@ -97,10 +118,9 @@ def parse_Meteon(path_to_Meteon):
     
     df = df.loc[(df['albedo']<=1)] #albedo cannot be > 1
     
-    df['Time'] = pd.DatetimeIndex(df['Time']).tz_localize(mountain)
+    df['Time'] = pd.DatetimeIndex(df['Time']).tz_localize(pytz.timezone(timezone))
     df.set_index('Time', inplace=True)
     return df
-    
     
 
 def merge_tables(DJI_parsed, Meteon_parsed):
@@ -116,20 +136,30 @@ def merge_tables(DJI_parsed, Meteon_parsed):
 
     Returns
     -------
+    merged: list of Pandas DataFrame objects
+        DataFrame objects for each merged DJI flight log
+        
     result : writes file in same directory as other files
         filtered and merged table containing all irradiance measurements with associated flight log
 
     """
     
-    x=0
+    
     merged = []
-    for df in DJI_parsed:
-        m = pd.merge(DJI_parsed[x], Meteon_parsed, left_on = DJI_parsed[x].index, right_on = Meteon_parsed.index, how='inner')
+    x=0
+    for dji in DJI_parsed[0]:
         
+        #take intersection of two dataframes based on index
+        m = pd.concat([dji, Meteon_parsed], axis=1, join='inner')
+        
+        #add to list of dataframes
         merged.append(m)
-        m.to_csv(paths_to_DJI[x][:-4] + "_merged.csv")
+        
+        #save to csv
+        m.to_csv(os.path.join(wd_path,'logfiles', 'merged', DJI_parsed[1][x][:-4]) + "_merged.csv")
         
         x+=1
+        
         
     return merged
 
