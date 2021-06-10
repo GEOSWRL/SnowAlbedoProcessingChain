@@ -4,14 +4,14 @@ Created on Fri May 22 16:20:59 2020
 
 @author: aman3
 """
-
+#conda install -c conda-forge py6s
 
 import math
 import gdal
 from Py6S import *
 import pandas as pd
 import dateutil
-from pytz import timezone
+import pytz
 #import pysolar
 import os
 import numpy as np
@@ -27,20 +27,21 @@ import earthpy as et
 
 wd_path = os.path.join(et.io.HOME, 'Documents', 'SnowAlbedoProcessingChain', 'working_directory')
 
-print(et.io.HOME)
-path_to_dem =  os.path.join(wd_path, 'surface_models', 'elevation', os.listdir(os.path.join(wd_path, 'surface_models', 'elevation'))[0])
+
+#path_to_dem =  os.path.join(wd_path, 'surface_models', 'elevation', os.listdir(os.path.join(wd_path, 'surface_models', 'elevation'))[0])
 path_to_output = et.io.HOME
 path_to_orthophotos = et.io.HOME
-path_to_tiffs = os.path.join(wd_path, 'imagery', 'TIFF')
+#path_to_tiffs = os.path.join(wd_path, 'imagery', 'TIFF')
 #path_to_warped = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/warped/'
 #path_to_corrected = 'C:/Users/aman3/Documents/GradSchool/testing/ortho/corrected/'
-path_to_log = os.path.join(path_to_tiffs, 'imageData50m.csv')
+#path_to_log = os.path.join(wd_path, 'logfiles', 'merged', '100m_merged.csv')
 #path_to_slope = et.io.HOME
 #path_to_aspect = et.io.HOME
+#datetime_fieldname = 'Unnamed: 0'
+timezone = 'US/Mountain'
 
-
-df = pd.read_csv(path_to_log)
-df.set_index('Image ID', inplace = True)
+df = pd.read_csv(path_to_log, parse_dates = True, index_col = datetime_fieldname)
+df.index = df.index.tz_convert(pytz.timezone('gmt'))
 
 
 def get_incidence_angle(topocentric_zenith_angle, slope, slope_orientation, topocentric_azimuth_angle):
@@ -48,13 +49,16 @@ def get_incidence_angle(topocentric_zenith_angle, slope, slope_orientation, topo
     slope_rad = math.radians(slope)
     so_rad = math.radians(slope_orientation)
     taa_rad = math.radians(topocentric_azimuth_angle)
+    
     return math.degrees(math.acos(math.cos(tza_rad) * math.cos(slope_rad) + math.sin(slope_rad) * math.sin(tza_rad) * math.cos(taa_rad - so_rad)))
 
 def process_DEM(path_to_dem, path_to_slope = None, path_to_aspect = None):
     #reproject DEM to UTM
     
+    #set gdal raster processing options
     processing_options = gdal.DEMProcessingOptions(alg = 'ZevenbergenThorne', slopeFormat = 'degree')
     
+    #run processing
     if path_to_slope == None and path_to_aspect == None:
         return
     
@@ -67,57 +71,62 @@ def process_DEM(path_to_dem, path_to_slope = None, path_to_aspect = None):
         return
     else:   
         gdal.DEMProcessing(path_to_slope, path_to_dem, 'slope', options = processing_options)
-        gdal.DEMProcessing(path_to_aspect, path_to_dem, 'slope', options = processing_options)
+        gdal.DEMProcessing(path_to_aspect, path_to_dem, 'aspect', options = processing_options)
         return
 
-def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltitude_fname, datetime_fname, start_wavelength, end_wavelength):
+def run_radiative_transfer(df, GPS_latitude_fname, GPS_longitude_fname, GPSAltitude_fname, start_wavelength = 0.31, end_wavelength = 2.7):
     #.31, 2.7 for PR1 pyranometers
     bandwidth = end_wavelength-start_wavelength
-    DIP = []
+    direct_proportion = []
     solar_zenith = []
     solar_azimuth = []
     global_downwelling = []
     et_irr = []
-
+    
     for index, row in df.iterrows():
-        
+        print("running 6s radiative transfer for measurement taken at " + str(index))
         #gather row data from flight log entry
         lat = row[GPS_latitude_fname]
         lon = row[GPS_longitude_fname]
         alt = row[GPSAltitude_fname]/1000
-        dt = index
-        #dt = dateutil.parser.parse(dt, dayfirst=True)
-        dt = str(dt.astimezone(timezone('gmt')))
-    
-        #initiate 6s, set parameters, and run
+        rel_alt = 50/1000
+        dt = str(index)
+        
+        
+        #initiate 6s
         s = SixS()
-        
-        
+    
+        #set 6s parameters
         s.wavelength = Wavelength(start_wavelength, end_wavelength)
-        s.altitudes.set_target_custom_altitude(alt - 0.05)
+        s.altitudes.set_target_custom_altitude(alt)
         s.geometry.from_time_and_location(lat, lon, dt, 0, 0)
         s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
         s.atmos_profile = AtmosProfile.FromLatitudeAndDate(lat, dt)
         s.visibility = None
         s.aot550 = 0.235
         
+        #run 6s
         s.run()
 
         #append radiative transfer results to corresponding storage arrays
-           
         global_downwelling.append((s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*bandwidth)
-        DIP.append(s.outputs.percent_direct_solar_irradiance)
+
+        direct_proportion.append(s.outputs.percent_direct_solar_irradiance)
         solar_zenith.append(s.outputs.solar_z)
         solar_azimuth.append(s.outputs.solar_a)
         et_irr.append(s.outputs.int_solar_spectrum)
         
     #create new dataframe columns from radiative transfer storage arrays
     df['6s_Extraterrestrial_irradiance'] = et_irr
-    df['6s_Direct_Irradiance_Proportion'] = DIP
+    df['6s_Direct_Irradiance_Proportion'] = direct_proportion
     df['6s_Solar_Zenith_Angle'] = solar_zenith
     df['6s_Solar_Azimuth_Angle'] = solar_azimuth
     df['6s_modeled_global_irradiance'] = global_downwelling
     
+    #overwrite existing logfile .csv
+    df.to_csv(path_to_log)
+    
+    #return updated dataframe
     return df
 
 def prep_calc(filename, path_to_ortho, path_to_slope, path_to_aspect, path_to_output):
@@ -385,10 +394,8 @@ def run_correction(ortho_dir, path_to_slope, path_to_aspect, output_dir):
                 
                 #Close the datasets
                 dsOut = None
-process_DEM(path_to_dem, path_to_slope = os.path.join(wd_path, 'surface_models', 'slope', 'slope.tiff'), path_to_aspect=(os.path.join(wd_path, 'surface_models', 'aspect', 'aspect.tiff')))         
-#run_radiative_transfer(df)
-#run_radiative_transfer(df, 'GPSLatitude', 'GPSLongitude', 'GPSAltitude', 'Timestamp')
-
-
+#process_DEM(path_to_dem, path_to_slope = os.path.join(wd_path, 'surface_models', 'slope', 'slope.tiff'), path_to_aspect=(os.path.join(wd_path, 'surface_models', 'aspect', 'aspect.tiff')))         
+#run_radiative_transfer(df, 'GPS(0):Lat', 'GPS(0):Long', 'GPS(0):heightMSL', 
+ #                      'General:relativeHeight', 0.31, 2.7)
 #run_correction(path_to_orthophotos, path_to_slope, path_to_aspect, path_to_output)
 

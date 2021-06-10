@@ -14,13 +14,16 @@ import os
 import earthpy as ep
 
 #set working directory
-wd_path = os.path.join(ep.io.HOME, 'Documents', 'SnowAlbedoProcessingChain', 'working_directory')
+wd_path = os.path.join(ep.io.HOME, 'Documents', 'Mirror', 'SnowAlbedoProcessingChain', 'working_directory')
 if not (os.path.exists(wd_path)):
     print('working directory does not exist')
 
 #set paths to logfiles    
-paths_to_DJI = [os.path.join(wd_path,'logfiles', 'dji', f) for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
-path_to_Meteon = os.path.join(wd_path, 'logfiles', 'meteon', os.listdir(os.path.join(wd_path, 'logfiles', 'meteon'))[0])
+#paths_to_DJI = [os.path.join(wd_path,'logfiles', 'dji', f) for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
+paths_to_DJI = ['C:/Temp/0318/dji/' + f for f in os.listdir('C:/Temp/0318/dji/')]
+
+#path_to_Meteon = os.path.join(wd_path, 'logfiles', 'meteon', os.listdir(os.path.join(wd_path, 'logfiles', 'meteon'))[0])
+path_to_Meteon = 'C:/Temp/0318/meteon/YC20210318_pyranometers.csv'
 
 
 angle_tolerance = 5 #degree threshold of tilt and roll, angles greater than this will be filtered out
@@ -72,10 +75,10 @@ def parse_DJI(paths_to_DJI):
     for path in (paths_to_DJI):
         
         #extract desired columns
-        df = pd.read_csv(path, usecols=[10,22,25,26,27,28,29,42,43,44,45,46,47,48,49,50,51,52], header=0)
+        df = pd.read_csv(path, usecols=['GPS:dateTimeStamp', 'IMU_ATTI(0):roll:C', 'IMU_ATTI(0):pitch:C', 'IMU_ATTI(0):yaw:C', 'IMU_ATTI(0):velComposite:C', 'IMU_ATTI(0):tiltInclination:C', 'IMU_ATTI(0):tiltDirectionEarthFrame:C', 'IMU_ATTI(0):tiltDirectionBodyFrame:C', 'GPS:Long', 'GPS:Lat', 'GPS:heightMSL', 'GPS:dateTimeStamp'], header=0)
 
         #filtering out altitudes <5m and pitch and roll >5 degrees
-        df = df.loc[(df['General:relativeHeight']>=height_tolerance) & (df['IMU_ATTI(0):roll']<=angle_tolerance) & (df['IMU_ATTI(0):roll']>=-angle_tolerance) & (df['IMU_ATTI(0):pitch']<=angle_tolerance) & (df['IMU_ATTI(0):pitch']>=-angle_tolerance)]
+        #df = df.loc[(df['General:relativeHeight']>=height_tolerance) & (df['IMU_ATTI(0):roll']<=angle_tolerance) & (df['IMU_ATTI(0):roll']>=-angle_tolerance) & (df['IMU_ATTI(0):pitch']<=angle_tolerance) & (df['IMU_ATTI(0):pitch']>=-angle_tolerance)]
 
         #convert to mountain time
         df['GPS:dateTimeStamp'] = pd.DatetimeIndex(df['GPS:dateTimeStamp']).tz_localize(None)
@@ -86,8 +89,8 @@ def parse_DJI(paths_to_DJI):
         df = df.groupby(df['GPS:dateTimeStamp']).mean()
         
         #adjust tilt_Direction to 360 deg. azimuth
-        df['IMU_ATTI(0):tiltDirection'] = df['IMU_ATTI(0):tiltDirection'].apply(tilt_direction_to_azimuth)
-        
+        df['IMU_ATTI(0):tiltDirectionBodyFrame:C'] = df['IMU_ATTI(0):tiltDirectionBodyFrame:C'].apply(tilt_direction_to_azimuth)
+        df['IMU_ATTI(0):tiltDirectionEarthFrame:C'] = df['IMU_ATTI(0):tiltDirectionEarthFrame:C'].apply(tilt_direction_to_azimuth)
         dfs.append(df)
         
         
@@ -114,9 +117,11 @@ def parse_Meteon(path_to_Meteon):
     df = pd.read_csv(path_to_Meteon, usecols=[0,2,5], skiprows=9, names = ["Time", "incoming (W/m^2)", "reflected (W/m^2)"], parse_dates=True)
     #df = pd.read_csv(path_to_Meteon, usecols=[0,5,2], skiprows=9, names = ["Time", "reflected (W/m^2)", "incoming (W/m^2)"], parse_dates=True)
     
-    df.insert(3,'albedo', df['reflected (W/m^2)'].div(df['incoming (W/m^2)'])) #calculate albedo
+    #correct downward faceing sensor for leg interference
+    reflected_corr = df['reflected (W/m^2)'].multiply(1.0197)
+    df.insert(3,'albedo', reflected_corr.div(df['incoming (W/m^2)'])) #calculate albedo
     
-    df = df.loc[(df['albedo']<=1)] #albedo cannot be > 1
+    #df = df.loc[(df['albedo']<=1)] #albedo cannot be > 1
     
     df['Time'] = pd.DatetimeIndex(df['Time']).tz_localize(pytz.timezone(timezone))
     df.set_index('Time', inplace=True)

@@ -16,11 +16,10 @@ import exiftool
 import earthpy as ep
 import imageio
 
-wd_path = os.path.join(ep.io.HOME, 'Documents', 'SnowAlbedoProcessingChain', 'working_directory')
-
-path_to_raw_images = os.path.join(wd_path, 'imagery', 'RAW')
-path_to_tiffs = os.path.join(wd_path, 'imagery', 'TIFF')
-path_to_merged_logs = os.path.join(wd_path,'logfiles', 'merged')
+wd_path = 'C:/Temp/sky_view/'
+path_to_raw_images = 'C:/Temp/sky_view/'
+path_to_tiffs = 'C:/Temp/sky_view/'
+path_to_merged_logs = 'C:/Temp/sky_view/'
 
 
 EXIFTOOL_PATH = os.path.join(ep.io.HOME, 'exiftool')
@@ -43,10 +42,10 @@ def raw_to_tiff():
 
     #convert to .tiff
     for filename in os.listdir(path_to_raw_images):
-            if filename.endswith(".DNG"):
+            if filename.endswith(".DNG") or filename.endswith(".CR2"):
                 raw_image_full_path = os.path.join(path_to_raw_images, filename)
                 
-                out_path = os.path.join(path_to_tiffs, filename[:-3] + '.tiff')
+                out_path = os.path.join(path_to_tiffs, filename[:-4] + '.tiff')
                 print(out_path)
                 print("converting " + filename + " to tiff")
                 with rawpy.imread(raw_image_full_path) as raw:

@@ -4,7 +4,13 @@ Created on Wed Feb  5 11:37:46 2020
 
 @author: x51b783
 """
-import numpy as np
+import exiftool
+import os
+import earthpy as ep
 
-x=np.array([85000, 20], [70000, 1]).astype('int32')
-y=x.astype('uint16')
+def myfunct(x, hello = 'hello', hello2 = 'hello2'):
+    print(x)
+    print(hello)
+    print(hello2)
+    
+myfunct(12, hello2 = 'hhhhhh')
