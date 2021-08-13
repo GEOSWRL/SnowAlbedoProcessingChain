@@ -48,7 +48,7 @@ viewshed = gdal.ViewshedGenerate(resampled_band, 'GTiff',
                                  noDataVal=0,
                                  dfCurvCoeff=0,
                                  mode=1,
-                                 maxDistance=1100,)
+                                 maxDistance=800)
 
 viewshed_arr = viewshed.ReadAsArray()
 plt.imshow(viewshed_arr)

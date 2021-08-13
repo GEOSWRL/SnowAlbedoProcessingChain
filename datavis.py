@@ -8,7 +8,7 @@ Created on Tue Mar 16 14:26:53 2021
 import pandas as pd
 import pytz
 import os
-import earthpy as ep
+
 import seaborn as sns
 from matplotlib import pyplot as plt
 from sklearn.linear_model import LinearRegression
@@ -36,7 +36,7 @@ def tilt_direction_to_azimuth(a):
 #statistics = 'C:/Temp/0318/YC20210318_statistics.csv'
 csv_all_path = 'C:/Users/x51b783/Documents/Mirror/Masters/Class/field_measurement_snow/project/SnowExData/20210224_albedo_sd.csv'
 
-csv_path = 'C:/Temp/IMU/3-11-2021 11-48-35 AM.csv'
+csv_path = 'D:/field_data/YC/YC20210428/merged/vertical_transects/vt2_FOV.csv'
 csv2_path = 'C:/Users/x51b783/Documents/Mirror/Masters/Class/field_measurement_snow/project/SnowExData/20210224_albedo_wtf.csv'
 csv3_path = 'C:/Users/x51b783/Documents/Mirror/Masters/Class/field_measurement_snow/project/SnowExData/FieldC_0217.csv'
 
@@ -76,13 +76,23 @@ g.plot_marginals(sns.histplot, color="#03051A", alpha=1, bins=25)
 
 a4_dims = (11.7, 8.27)
 fig, ax = plt.subplots(figsize=a4_dims)
+#ax = sns.stripplot(data=[df['albedo'], df['corrected_albedo_ss'], df['cos_avg_ls8_ss']])
 
-"""
-sns.violinplot(data=[df['albedo'], df2["albedo"]], 
-                     palette="Set3", bw=.2, cut=1, linewidth=1, inner="quartile")
-#ax.set_ylim([0.28,1.1])
-ax.set_xticklabels(['Feb 17','Feb 24'])
-"""
+#sns.violinplot(data=[df['albedo'], df['corrected_albedo_ss'], df['cos_avg_ls8_ss']], 
+#                     palette="Set3", bw=.2, cut=1, linewidth=1, inner="quartile")
+
+'''
+sns.boxplot(data=[df['albedo'], df['corrected_albedo_ss'], df['cos_avg_ls8_ss']], 
+                     palette="Set3")
+ax.set_ylim([0.28,1.1])
+'''
+#print(df['albedo'].mean())
+#print(df['corrected_albedo_ss'].mean())
+#print(df['cos_avg_ls8_ss'].mean())
+
+#print('mean dif: ' + str((df['corrected_albedo_ss'].mean()-df['cos_avg_ls8_ss'].mean())))
+#ax.set_xticklabels(['Feb 17','Feb 24'])
+
 
 #sns.boxplot(data=[df["cosine_avg_correctedo_albedo"], df['cos_avg_ls8']], palette="Set3", linewidth=1)
 
@@ -90,8 +100,14 @@ ax.set_xticklabels(['Feb 17','Feb 24'])
 #sns.scatterplot(data = df, x='alt_agl', y='rmse_ls8', hue = 'elev_source', s=200, palette = 'hls', style = 'Date')
 #sns.scatterplot(y=df['albedo'], x=df.index, s=200, palette = 'hls')
 
-sns.scatterplot(y=df['albedo'], x=df.index, s=200, palette = 'hls')
-sns.scatterplot(y=df['corrected_albedo_ss'], x=df.index, s=200, palette = 'hls')
+#sns.scatterplot(y=df['albedo'], x=df.index, s=200, palette = 'hls')
+#sns.scatterplot(y=df['cos_avg_ls8_ss'], x=df['corrected_albedo_ss'], s=200, palette = 'hls')
+#sns.scatterplot(y=df['cos_avg_ls8_ss'], x=df['albedo'], s=200, palette = 'hls')
+#sns.scatterplot(y=df['cos_avg_ls8_ss'], x=df['agl_alt'], s=200, palette = 'hls', label = 'ls8 albedo')
+#sns.scatterplot(y=df['albedo'], x=df['agl_alt'], s=200, palette = 'hls', label = 'albedo')
+#sns.scatterplot(y=df['corrected_albedo_ss'], x=df['agl_alt'], s=200, palette = 'hls', label = 'corrected albedo')
+
+
 
 #sns.scatterplot(y=df['cos_avg_aspect'], x=df.index, s=200, palette = 'hls')
 #sns.scatterplot(y=df['tilt_dir'], x=df.index, s=200, palette = 'hls')
@@ -132,6 +148,8 @@ print('coefficient of determination:', r_sq)
 #sns.scatterplot(x=df['alt_agl'], y=df['bias_ls8'], hue = df['elev_source'], s=200, palette = 'hls', legend = None)
 #sns.scatterplot(x=df['alt_agl'], y=df['sd_corrected'], hue = df['elev_source'])
 #sns.scatterplot(x=df['alt_agl'], y=df['corrected_mean'], hue = df['elev_source'])
+
+sns.scatterplot(x=df['ls8_albedo'], y=df['corrected_albedo'], hue = df['FOV'])
 
 plt.xticks(fontsize=14)
 plt.yticks(fontsize=14)

@@ -32,7 +32,7 @@ from PIL import Image
 
 SOURCE_FILE = 'C:/Temp/bareground/elevation/YC20200805_DEM.tif'
 OUTPUT_FILE = 'C:/Temp/bareground/elevation/YC20200805_DEM_smoothed.tif'
-gaussian_kernel = 25
+gaussian_kernel = 1
 
 
 
@@ -90,11 +90,11 @@ def apply_smoothing(data, method = 'gaussian'):
         
         gaussian = ndimage.gaussian_filter(data, gaussian_kernel)
         
-        plt.subplot(212)
-        plt.imshow(gaussian)
-        plt.title(r'Gaussian Smoothing')
-        plt.gray()
-        plt.subplots_adjust(bottom=.1, right=1, top=2)
+        #plt.subplot(212)
+        #plt.imshow(gaussian)
+        #plt.title(r'Gaussian Smoothing')
+        #plt.gray()
+        #plt.subplots_adjust(bottom=.1, right=1, top=2)
         
         return gaussian 
 

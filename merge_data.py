@@ -11,19 +11,20 @@ conda install -c conda-forge earthpy
 import pandas as pd
 import pytz
 import os
-import earthpy as ep
+#import earthpy as ep
 
 #set working directory
-wd_path = os.path.join(ep.io.HOME, 'Documents', 'Mirror', 'SnowAlbedoProcessingChain', 'working_directory')
+#wd_path = os.path.join(ep.io.HOME, 'Documents', 'Mirror', 'SnowAlbedoProcessingChain', 'working_directory')
+wd_path = 'C:/Users/x51b783/Desktop/temp_data_storage/YC20210428/'
 if not (os.path.exists(wd_path)):
     print('working directory does not exist')
 
 #set paths to logfiles    
 #paths_to_DJI = [os.path.join(wd_path,'logfiles', 'dji', f) for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
-paths_to_DJI = ['C:/Temp/0318/dji/' + f for f in os.listdir('C:/Temp/0318/dji/')]
+paths_to_DJI = ['C:/Users/x51b783/Desktop/temp_data_storage/YC20210428/dji/csv/' + f for f in os.listdir('C:/Users/x51b783/Desktop/temp_data_storage/YC20210428/dji/csv/')]
 
 #path_to_Meteon = os.path.join(wd_path, 'logfiles', 'meteon', os.listdir(os.path.join(wd_path, 'logfiles', 'meteon'))[0])
-path_to_Meteon = 'C:/Temp/0318/meteon/YC20210318_pyranometers.csv'
+path_to_Meteon = 'C:/Users/x51b783/Desktop/temp_data_storage/YC20210428/meteon/YC20210428_pyranometers_csv.csv'
 
 
 angle_tolerance = 5 #degree threshold of tilt and roll, angles greater than this will be filtered out
@@ -94,7 +95,7 @@ def parse_DJI(paths_to_DJI):
         dfs.append(df)
         
         
-    filenames = [f for f in os.listdir(os.path.join(wd_path, 'logfiles', 'dji'))]
+    filenames = [f for f in os.listdir(os.path.join(wd_path, 'dji', 'csv'))]
         
     return dfs, filenames
     
@@ -161,7 +162,7 @@ def merge_tables(DJI_parsed, Meteon_parsed):
         merged.append(m)
         
         #save to csv
-        m.to_csv(os.path.join(wd_path,'logfiles', 'merged', DJI_parsed[1][x][:-4]) + "_merged.csv")
+        m.to_csv(wd_path + 'merged/' + DJI_parsed[1][x][:-4] + "_merged.csv")
         
         x+=1
         

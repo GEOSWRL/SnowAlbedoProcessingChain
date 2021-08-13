@@ -17,13 +17,13 @@ from osgeo import gdal, gdalconst
 from scipy import ndimage
 from PIL import Image
 
-original_usgs_path = 'C:/Temp/3DEP/3DEP_ycoords_UTM.tif'
-original_sfm_path = 'C:/Temp/0311/sfm/coords/sfm_ycoords.tif'
+original_usgs_path = 'D:/field_data/YC/3DEP/3DEP_DEM_UTM.tif'
+original_sfm_path = 'D:/field_data/YC/YC20210428/sfm/elevation/dem_UTM_clipped.tif'
 
-warped_usgs_path = 'C:/Temp/3DEP/resampled/3DEP_ycoords_res_UTM.tif'
-warped_sfm_path = 'C:/Temp/0311/sfm/coords/sfm_ycoords_ext.tif'
+warped_usgs_path = 'D:/field_data/YC/3DEP/resampled/3DEP_DEM_UTM_res.tif'
+warped_sfm_path = 'D:/field_data/YC/YC20210428/sfm/elevation/dem_UTM_clipped_res.tif'
 
-merged_destination = 'C:/Temp/0311/sfm/coords/ycoords.tif'
+merged_destination = 'D:/field_data/YC/YC20210428/sfm/elevation/dem_merged.tif'
 #ls8_path = 'C:/Temp/0311/ls8/LC08_038029_20210311_albedo.tif'
 usgs_offset = -13
 
@@ -68,7 +68,7 @@ new_geo = [usgs_gt[0], sfm_gt[1], 0.0, usgs_gt[3], 0.0, sfm_gt[5]]
 new_cols = usgs_gt[1] * usgs_cols / sfm_gt[1]
 new_rows = usgs_gt[5] * usgs_rows / sfm_gt[5]
 
-#dst_filename = 'C:/Temp/3DEP/3DEP_resampled_UTM.tif'
+
 
 warp_options = gdal.WarpOptions(format = 'GTiff', outputBounds = [minX, minY, maxX, maxY], 
                                 width = new_cols, height = new_rows,
@@ -118,7 +118,7 @@ print(np.nanmin(warped_sfm_arr))
 
 warped_usgs_arr = warped_usgs_band.ReadAsArray()
 warped_usgs_arr[warped_usgs_arr==usgs_ndv] = np.nan
-#usgs_arr += usgs_offset
+warped_usgs_arr += usgs_offset
 
 indices = np.where(np.isnan(warped_sfm_arr))
 

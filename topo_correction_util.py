@@ -36,7 +36,38 @@ def resample(original_source, desired_source, destination_path):
     
     return out
 
+def make_coordinate_array(path_to_coordinate_array_x, path_to_coordinate_array_y, geotransform, image_shape, method = 'corner'):
+    
+    coordinate_array_x = np.zeros(image_shape)
+    coordinate_array_y = np.zeros(image_shape)
+    
+    pixel_y = geotransform[3]
+    pixel_x = geotransform[0]
+    
+    if method == 'center':
+        pixel_y += (geotransform[5]/2)
+        pixel_x += (geotransform[1]/2)
 
+    for row in range(0, image_shape[0]):
+        for col in range(0, image_shape[1]):
+            
+            coordinate_array_x[row][col] = pixel_x
+            coordinate_array_y[row][col] = pixel_y
+            
+            pixel_x += geotransform[1]
+        
+        pixel_x = geotransform[0]
+        
+        if method == 'center':
+            pixel_x += (geotransform[1]/2)
+               
+        pixel_y += geotransform[5]  
+        
+        
+    write_geotiff(path_to_coordinate_array_x, image_shape, geotransform, 32612, coordinate_array_x)
+    write_geotiff(path_to_coordinate_array_y, image_shape, geotransform, 32612, coordinate_array_y)
+    
+    return coordinate_array_x, coordinate_array_y
 
 def get_band_array(file):
     

@@ -24,29 +24,46 @@ os.environ['GDAL_DATA'] = 'C:\\Users\\x51b783\\.conda\\envs\gdal\\Library\\share
 ################################################ Set Parameters ################################################
 
 #path to DEM
-elev_path = 'C:/Temp/3DEP/3DEP_clipped.tif'
+coarse_elev_path = 'D:/field_data/YC/3DEP/3DEP_DEM_UTM.tif'
+
 temp_elev = 'C:/Temp/temp_elev.tif'
 usgs_slope = ''
 usgs_aspect = ''
 usgs_xcoords = ''
 usgs_ycoords = ''
 #Desired path to UTM projected DEM that is created in the "prep_rasters" function. Must end in '.tif'
-elev_UTM_path = 'C:/Temp/0311/sfm/elevation/elevation.tif'
+elev_UTM_path = 'D:/field_data/YC/3DEP/3DEP_DEM_UTM.tif'
 
 #Desired paths to slope and aspect rasters that are created in the "prep_rasters" function. Must end in '.tif'
 
-path_to_slope = 'C:/Temp/0311/sfm/slope/slope.tif'
-path_to_aspect = 'C:/Temp/0311/sfm/aspect/aspect.tif'
-path_to_coordinate_array_x = 'C:/Temp/0311/sfm/coords/xcoords.tif'
-path_to_coordinate_array_y = 'C:/Temp/0311/sfm/coords/ycoords.tif'
+path_to_slope = 'D:/field_data/YC/3DEP/3DEP_slope_UTM.tif'
+path_to_aspect = 'D:/field_data/YC/3DEP/3DEP_aspect_UTM.tif'
+path_to_coordinate_array_x = 'D:/field_data/YC/3DEP/3DEP_xcoords_UTM.tif'
+path_to_coordinate_array_y = 'D:/field_data/YC/3DEP/3DEP_ycoords_UTM.tif'
 
 
 #path to csv file
 #csv file must contain latitude, longitude, altitude, pitch, roll, and yaw
-csv_path = 'C:/Temp/IMU/test/3-11-2021 11-48-35 AM.csv'
+csv_path = 'D:/field_data/YC/YC20210311/merged/albedo_10m_USGS.csv'
+
+#FOV_path = 'D:/field_data/YC/YC20210311/merged/vertical_transects/vt1_FOV.csv'
 
 
-#csv field names
+#csv field names DJI
+datetime_fname = 'datetime'
+GPS_latitude_fname = 'GPS:Lat'
+GPS_longitude_fname  = 'GPS:Long'
+GPSAltitude_fname = 'GPS:heightMSL'
+pitch_fname = 'IMU_ATTI(0):pitch:C'
+roll_fname = 'IMU_ATTI(0):roll:C'
+yaw_fname = 'IMU_ATTI(0):yaw:C'
+tilt_fname = 'IMU_ATTI(0):tiltInclination:C'
+tilt_dir_fname = 'IMU_ATTI(0):tiltDirectionEarthFrame:C'
+albedo_meas_fname = 'albedo'
+agl_alt_fname = 'agl_alt'
+
+'''
+#csv field names IMU
 datetime_fname = 'datetime'
 GPS_latitude_fname = 'latitude'
 GPS_longitude_fname  = 'longitude'
@@ -57,7 +74,7 @@ yaw_fname = 'AngleZ：'
 tilt_fname = 'tilt'
 tilt_dir_fname = 'tilt_dir'
 albedo_meas_fname = 'albedo'
- 
+'''
 source_epsg = 'EPSG:4326' #EPSG that the point data is initially stored in
 dest_epsg = 'EPSG:32612' #UTM Zone 12-N
 
@@ -66,8 +83,13 @@ utm_epsg = 32612
 
 #set sensor specifications
 sensor_bandwidth = [0.31, 2.7] #in micrometers
-sensor_half_FOV = 85 #in degrees
+sensor_half_FOV = 75 #in degrees
+#sensor_FOVs = [30,32.5,35,37.5,40,42.5,45,47.5,50,52.5,55,57.5,60,62.5,65,67.5,70,72.5,75,77.5,80,82.5,85,87.5,89]
+#sensor_FOVs = [30,35,40,45,50,55,60,65,70,75,80,85,89]
+#sensor_FOVs = [30,70]
+#sensor_FOVs = [80]
 sensor_half_FOV_rad = np.radians(sensor_half_FOV)
+#sensor_half_FOVs_rad = np.radians(sensor_FOVs)
 geotransform = []
 
 ss_elev = gdal.Open(elev_UTM_path, gdal.GA_ReadOnly)
@@ -83,10 +105,13 @@ run_radiative_transfer = True
 calculate_terrain_parameters = True
 run_topo_correction = True
 
+
 #open up landsat 8 file and read as array
-#ls8 = gdal.Open('C:/Temp/0311/ls8/LC08_038029_20210311.tif', gdal.GA_ReadOnly)
-#ls8_array = tcu.get_band_array(ls8)
-#ls8 = None
+ls8 = gdal.Open('D:/field_data/YC/3DEP/ls8/YC20210311_ls8_3DEP.tif', gdal.GA_ReadOnly)
+#ls8 = gdal.Open('D:/field_data/YC/3DEP/ls8/YC20210318_ls8_3DEP.tif', gdal.GA_ReadOnly)
+#ls8 = gdal.Open('D:/field_data/YC/3DEP/ls8/YC20210428_ls8_3DEP.tif', gdal.GA_ReadOnly)
+ls8_array = tcu.get_band_array(ls8)
+ls8 = None
 
 
 ################################################### Code Body ##################################################
@@ -111,15 +136,17 @@ def radiative_transfer(gdf, row, index):
     s.altitudes.set_target_custom_altitude(alt_km)
     s.geometry.from_time_and_location(lat, lon, dt, 0, 0)
     s.aero_profile = AeroProfile.PredefinedType(AeroProfile.Continental)
-    s.atmos_profile = AtmosProfile.FromLatitudeAndDate(lat, dt)
-    #s.atmos_profile = AtmosProfile.PredefinedType(AtmosProfile.MidlatitudeWinter)
+    #s.atmos_profile = AtmosProfile.FromLatitudeAndDate(lat, dt)
+    s.atmos_profile = AtmosProfile.PredefinedType(AtmosProfile.MidlatitudeWinter)
     #s.visibility = None
     #s.aot550 = 0.1
-        
+    
     #run 6s
     s.run()
-
+    print('hi')
     #get radiative transfer outputs
+    
+    print(s.outputs)
     global_irradiance = (s.outputs.direct_solar_irradiance + s.outputs.diffuse_solar_irradiance + s.outputs.environmental_irradiance)*bandwidth
     p_dir = (s.outputs.percent_direct_solar_irradiance) #direct proportion of irradiance
     p_diff = 1-p_dir #diffuse proportion of irradiance
@@ -140,6 +167,7 @@ def make_coordinate_array(geotransform, image_shape):
     coordinate_array_y = np.zeros(image_shape)
 
     pixel_y = geotransform[3]
+    
     pixel_x = geotransform[0]
 
     for row in range(0, image_shape[0]):
@@ -231,7 +259,7 @@ def prep_point_data():
     gdf['yaw_radians'] = np.radians(gdf[yaw_fname])
 
     if(calculate_terrain_parameters==True):
-        #gdf['mean_slope'] = np.zeros(gdf.shape[0])
+        gdf['mean_slope'] = np.zeros(gdf.shape[0])
         #gdf['mean_aspect'] = np.zeros(gdf.shape[0])
         
         gdf['cos_avg_slope_ss'] = np.zeros(gdf.shape[0])
@@ -271,13 +299,14 @@ def prep_point_data():
     
     return gdf
     
-def run_viewshed(elev_band, point_lon, point_lat):
+def run_viewshed(elev_band, point_lon, point_lat, agl_alt=10):
+    
     viewshed = gdal.ViewshedGenerate(elev_band, 'GTiff', 
                                  'C:/Temp/3DEP/viewshed_test.tif',
                                  creationOptions=None,
                                  observerX=point_lon, 
                                  observerY=point_lat, 
-                                 observerHeight=1.5, 
+                                 observerHeight = agl_alt, 
                                  targetHeight = 0,
                                  visibleVal=1,
                                  invisibleVal=0,
@@ -285,10 +314,10 @@ def run_viewshed(elev_band, point_lon, point_lat):
                                  noDataVal=np.nan,
                                  dfCurvCoeff=1,
                                  mode=1,
-                                 maxDistance=10000000000)
+                                 maxDistance=800)
 
     #viewshed_arr = viewshed.ReadAsArray()
-    
+    #plt.imshow(viewshed_arr)
     #viewshed = None
     
     return viewshed
@@ -322,9 +351,7 @@ def reduce_array_extent(array, geotransform):
     
     return clipped_arr, new_geotransform
 
-def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_array_x, coordinate_array_y, gdf, row, index):
-    
-    
+def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_array_x, coordinate_array_y, gdf, row, index, model_source, coarse_source):
     
     print('calculating terrain parameters')
         
@@ -332,39 +359,28 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     #point_lat = row['geometry'].centroid.y # centroid.y is y coordinate of point geometry feature in UTM
     point_lon = row['lon_utm']
     point_lat = row['lat_utm']
-    
+    #print(point_lon, point_lat)
     point_elev = row[GPSAltitude_fname]
     
+    ################### create viewshed array ###############################
     
-    usgs_gt = usgs_source.GetGeoTransform()
-    usgs_proj = usgs_source.GetProjection()
-    usgs_cols = usgs_source.RasterXSize
-    usgs_rows = usgs_source.RasterYSize
+    resampled = tcu.resample(model_source, coarse_source, 'C:/Temp/temp/viewshed_resampled.tif')
+    resampled_band = resampled.GetRasterBand(1)
+    resampled_band.SetNoDataValue(np.nan)
     
-    
-    minX = usgs_gt[0]
-    maxX = usgs_gt[0] + (usgs_cols * usgs_gt[1])
-
-    minY = usgs_gt[3] + (usgs_rows * usgs_gt[5])
-    maxY = usgs_gt[3]
-    
-    viewshed = run_viewshed(elev_utm_band, point_lon, point_lat)
+    #viewshed = run_viewshed(resampled_band, point_lon, point_lat, row['agl_alt'])
+    viewshed = run_viewshed(resampled_band, point_lon, point_lat)
     
     #resample viewshed array to original resolution
-    warp_options = gdal.WarpOptions(format = 'GTiff', outputBounds = [minX, minY, maxX, maxY], 
-                                width = new_cols, height = new_rows,
-                                srcSRS = utm_epsg, dstSRS = utm_epsg)
-    resampled_viewshed = gdal.Warp(resampled_viewshed_path, viewshed, options = warp_options)
+    viewshed_aligned = tcu.resample(viewshed, model_source,'C:/Temp/temp/viewshed_temp.tif')
+    viewshed_array = viewshed_aligned.GetRasterBand(1).ReadAsArray()
     
-    
-    not_visible = np.where(viewshed_arr_resampled==0)
-    
-    temp_elev_viewshed = None
-    reduced_elev_band = None
+    not_visible = np.where(viewshed_array==0)
     elev_array[not_visible] = np.nan
     
     
     
+    #################### create footprint projection ###########################
     elev_diff = point_elev - elev_array # calculate elevation difference
     elev_diff[elev_diff<=0]=np.nan # points above the downward-facing sensor should be masked out as well
     
@@ -387,9 +403,7 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     #notice that x and y are switched here. This is because we need the coordinate system to be in the form of 
     #North = x axis, East = y axis, Up/down = z axis
 
-    
-
-    surface_normal = [[0],[0],[-1]]
+    surface_normal = [0,0,-1]
     
     pitch = row['pitch_radians']
     roll = row['roll_radians']
@@ -403,15 +417,15 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     
     surface_normal = np.dot(rot_matrix, surface_normal)
     '''
-    #surface_normal = angles.rotate_normals(surface_normal, pitch, roll, yaw)
+    surface_normal = angles.rotate_normals(surface_normal, pitch, roll, yaw)
     
     
     #calculate incidence angle between radiating pixel and sensor
-    angle = np.arcsin(np.abs((surface_normal[0][0] * dist_x + 
-                              surface_normal[1][0] * dist_y + 
-                              surface_normal[2][0] * -1 * elev_diff) /
+    angle = np.arcsin(np.abs((surface_normal[0] * dist_x + 
+                              surface_normal[1] * dist_y + 
+                              surface_normal[2] * -1 * elev_diff) /
                              (np.sqrt(np.square(dist_x)+np.square(dist_y)+np.square(elev_diff)) *
-                              np.sqrt(np.square(surface_normal[0][0])+np.square(surface_normal[1][0])+np.square(surface_normal[2][0])
+                              np.sqrt(np.square(surface_normal[0])+np.square(surface_normal[1])+np.square(surface_normal[2])
                                       ))
                              ))
     
@@ -420,11 +434,13 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     #tcu.write_geotiff('C:/Temp/angle.tif', np.shape(angle), geotransform, utm_epsg, np.degrees(angle))
     
     #filter pixels based on FOV of sensor
-    angle[angle<=(math.pi/2)-sensor_half_FOV_rad]=np.nan
-    nan_indices = np.where(np.isnan(angle))
     
+    angle[angle<=(math.pi/2)-sensor_half_FOV_rad]=np.nan
+    #tcu.write_geotiff('D:/field_data/YC/YC20210428/imu/test_angle_80.tif', np.shape(angle), geotransform, utm_epsg, np.degrees(angle))
+    #nan_indices = np.where(np.isnan(angle))
+    #print('max angle: ' + str(90-np.degrees(np.nanmin(angle))))
     #set pixels to nan in other arrays
-    elev_array[nan_indices] = np.nan
+    #elev_array[nan_indices] = np.nan
     
     #plt.imshow(elev_array)
     #note that the maximum angle should never greater than 90 degrees (1.5708 rad)
@@ -438,12 +454,13 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     # calculate cosine wighted average
     aspect_arr_weighted = weighting * aspect_array
     weighted_aspect = np.nansum(aspect_arr_weighted)
-    #print('cosine-weighted mean aspect: ' + str(weighted_aspect))
+    print('cosine-weighted mean aspect: ' + str(weighted_aspect))
+    
     
     #cos_avg_aspect = cos_avg_aspect.append(weighted_aspect)
     
-    print('aspect: ' + str(weighted_aspect))
-    print('tilt_dir: ' + str(row['tilt_dir']))
+    #print('aspect: ' + str(weighted_aspect))
+    #print('tilt_dir: ' + str(row['tilt_dir']))
     
     
     # calculate cosine wighted average
@@ -453,30 +470,36 @@ def calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_ar
     
     #cos_avg_slope = cos_avg_slope.append(weighted_slope)
 
-    '''
-    # now calculate arithmetic mean
-    aspect_arr_masked = aspect_arr_weighted/weighting
-    arth_mean_aspect = np.nanmean(aspect_arr_masked)
-    #print('arithmetic mean aspect: ' + str(arth_mean_aspect))
-    gdf.loc[index, 'mean_aspect'] = arth_mean_aspect
-    #mean_aspect = mean_aspect.append(arth_mean_aspect)
     
     # now calculate arithmetic mean
-    slope_arr_masked = slope_arr_weighted/weighting
-    arth_mean_slope = np.nanmean(slope_arr_masked)
+    #aspect_arr_masked = aspect_arr_weighted/weighting
+    #arth_mean_aspect = np.nanmean(aspect_arr_masked)
+    #print('arithmetic mean aspect: ' + str(arth_mean_aspect))
+    #gdf.loc[index, 'mean_aspect'] = arth_mean_aspect
+    #weighted_aspect = arth_mean_aspect
+    
+    # now calculate arithmetic mean
+    #slope_arr_masked = slope_arr_weighted/weighting
+    #arth_mean_slope = np.nanmean(slope_arr_masked)
     #print('arithmetic mean slope: ' + str(arth_mean_slope))
     #mean_slope = mean_slope.append(arth_mean_slope)
-    gdf.loc[index,'mean_slope'] = arth_mean_slope
-    '''
+    #weighted_slope = arth_mean_slope
+    
 
-    """
+    
     #calculate cosine averaged ls8 albedo value
     ls8_arr_weighted = weighting * ls8_array
     weighted_ls8 = np.nansum(ls8_arr_weighted)
-    #print('cosine-weighted mean aspect: ' + str(weighted_aspect))
-    gdf.loc[index, 'cos_avg_ls8'] = weighted_ls8
-    """
     
+    #ls8_arr_masked = ls8_arr_weighted/weighting
+    #arth_mean_ls8 = np.nanmean(ls8_arr_masked)
+    #print('cosine-weighted mean aspect: ' + str(weighted_aspect))
+    gdf.loc[index, 'cos_avg_ls8_ss'] = weighted_ls8
+    
+    resampled = None
+    resampled_band = None
+    viewshed = None
+    viewshed_aligned = None
     
     return weighted_slope, weighted_aspect
 
@@ -537,44 +560,17 @@ def process_handler():
         ss_coordinate_x = gdal.Open(path_to_coordinate_array_x, gdal.GA_ReadOnly)
         ss_coordinate_y = gdal.Open(path_to_coordinate_array_y, gdal.GA_ReadOnly)
         
+        coarse_elev = gdal.Open(coarse_elev_path, gdal.GA_ReadOnly)
         
-        '''
-        usgs_elev = gdal.Open(elev_UTM_path, gdal.GA_ReadOnly) # open reprojected elevation GeoTiff 
-        usgs_slope = gdal.Open(path_to_slope, gdal.GA_ReadOnly)
-        usgs_aspect = gdal.Open(path_to_aspect, gdal.GA_ReadOnly)
-        usgs_coordinate_x = gdal.Open(path_to_coordinate_array_x, gdal.GA_ReadOnly)
-        usgs_coordinate_y = gdal.Open(path_to_coordinate_array_y, gdal.GA_ReadOnly)
-        
-        bg_elev = gdal.Open(elev_UTM_path, gdal.GA_ReadOnly) # open reprojected elevation GeoTiff 
-        bg_slope = gdal.Open(path_to_slope, gdal.GA_ReadOnly)
-        bg_aspect = gdal.Open(path_to_aspect, gdal.GA_ReadOnly)
-        bg_coordinate_x = gdal.Open(path_to_coordinate_array_x, gdal.GA_ReadOnly)
-        bg_coordinate_y = gdal.Open(path_to_coordinate_array_y, gdal.GA_ReadOnly)
-        '''
+    
         ss_elev_arr = tcu.get_band_array(ss_elev)
         ss_slope_arr = tcu.get_band_array(ss_slope)
         ss_aspect_arr = tcu.get_band_array(ss_aspect)
         ss_coordinate_array_x_arr = tcu.get_band_array(ss_coordinate_x)
         ss_coordinate_array_y_arr = tcu.get_band_array(ss_coordinate_y)
-        '''
-        usgs_elev_arr = tcu.get_band_array(elev_UTM)
-        usgs_slope_arr = tcu.get_band_array(slope_UTM)
-        usgs_aspect_arr = tcu.get_band_array(aspect_UTM)
-        usgs_coordinate_array_x_arr = tcu.get_band_array(coordinate_x)
-        usgs_coordinate_array_y_arr = tcu.get_band_array(coordinate_y)
-        
-        bg_elev_arr = tcu.get_band_array(elev_UTM)
-        bg_slope_arr = tcu.get_band_array(slope_UTM)
-        bg_aspect_arr = tcu.get_band_array(aspect_UTM)
-        bg_coordinate_array_x_arr = tcu.get_band_array(coordinate_x)
-        bg_coordinate_array_y_arr = tcu.get_band_array(coordinate_y)
-        '''
+
         print('rasters loaded')
-        ss_elev = None 
-        ss_slope = None
-        ss_aspect = None
-        ss_coordinate_x = None
-        ss_coordinate_y = None
+        
         
     else:
         
@@ -587,19 +583,12 @@ def process_handler():
         print('measured incoming: ' + str(row['incoming (W/m^2)']))
         
         if calculate_terrain_parameters:
-            ss_slope, ss_aspect = calc_terrain_parameters(ss_elev_arr, ss_slope_arr, ss_aspect_arr, ss_coordinate_array_x_arr, ss_coordinate_array_y_arr, gdf, row, index)
+            ss_slope, ss_aspect = calc_terrain_parameters(ss_elev_arr, ss_slope_arr, ss_aspect_arr, ss_coordinate_array_x_arr, ss_coordinate_array_y_arr, gdf, row, index,
+                                                          ss_elev, coarse_elev)
             gdf.loc[index, 'cos_avg_slope_ss'] = ss_slope
             gdf.loc[index, 'cos_avg_aspect_ss'] = ss_aspect
             
-            '''
-            bg_slope, bg_aspect = calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_array_x, coordinate_array_y, gdf, row, index)
-            gdf.loc[index, 'cos_avg_slope_bg'] = bg_slope
-            gdf.loc[index, 'cos_avg_aspect_bg'] = bg_aspect
             
-            usgs_slope, usgs_aspect = calc_terrain_parameters(elev_array, slope_array, aspect_array, coordinate_array_x, coordinate_array_y, gdf, row, index)
-            gdf.loc[index, 'cos_avg_slope_usgs'] = usgs_slope
-            gdf.loc[index, 'cos_avg_aspect_usgs'] = usgs_aspect
-            '''
             
         if run_radiative_transfer:
             gdf = radiative_transfer(gdf, row, index)
@@ -611,18 +600,42 @@ def process_handler():
             cosine_avg_corrected_albedo_ss = topo_correction(gdf, row, index, 'cos_avg_slope_ss', 'cos_avg_aspect_ss')
             gdf.loc[index, 'corrected_albedo_ss'] = cosine_avg_corrected_albedo_ss
         
-            '''
-            cosine_avg_corrected_albedo_bg = topo_correction(gdf, row, index, 'cos_avg_slope_bg', 'cos_avg_aspect_bg')
-            gdf.loc[index, 'corrected_albedo_bg'] = cosine_avg_corrected_albedo_bg
-            
-            cosine_avg_corrected_albedo_usgs = topo_correction(gdf, row, index, 'cos_avg_slope_usgs', 'cos_avg_aspect_usgs')
-            gdf.loc[index, 'corrected_albedo_usgs'] = cosine_avg_corrected_albedo_usgs
-            '''
-            
+        
+    ss_elev = None 
+    ss_slope = None
+    ss_aspect = None
+    ss_coordinate_x = None
+    ss_coordinate_y = None 
+    
     gdf.to_csv(csv_path)
     
+    return gdf
+    '''
+    return(gdf['albedo'].to_numpy(), gdf['corrected_albedo_ss'].to_numpy(), 
+           gdf['cos_avg_ls8_ss'].to_numpy(), gdf['agl_alt'].to_numpy())
+    '''
+'''
+df_fov = pd.DataFrame(columns = ['FOV', 'albedo', 'corrected_albedo', 'ls8_albedo', 'agl_alt'])
+
+for fov in sensor_half_FOVs_rad:
+    #print(np.degrees(fov))
+    sensor_half_FOV_rad = fov
+    uncor_albedo,cor_albedo,ls8_albedo, agl_alt = process_handler()
+
+    #df_temp = pd.DataFrame({ 'FOV': [np.degrees(fov)], 'dif': [np.abs(uncor_albedo[0]-uncor_albedo[1])], 'cor_dif': [np.abs(cor_albedo[0]-uncor_albedo[1])]})
+    df_temp = pd.DataFrame({ 'FOV': [np.degrees(fov)] * len(uncor_albedo), 'abedo': uncor_albedo, 
+                            'corrected_albedo': cor_albedo, 'ls8_albedo': ls8_albedo, 'agl_alt': agl_alt})
+    df_fov = df_fov.append(df_temp)
+    
+
+ 
+df_fov.to_csv(FOV_path) 
+'''
+  
+
 def main():
-    process_handler()
+    process_handler()  
+    print('hi')
 
 if __name__ == "__main__":
     #prep_rasters()

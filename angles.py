@@ -13,11 +13,11 @@ import numpy as np
 dip = 29
 dip_dir = 295
 
-pitch = 27.9
+pitch = -1.16756753
 
-roll = 0.29
+roll = 4.667631672
 
-yaw = 94
+yaw = -163.4712617
 
 '''
 pitch = -10
@@ -32,7 +32,6 @@ yaw = -90
 #yaw_offset = 63
 
 #yaw -= yaw_offset
-
 
 def unit_vector(vector):
     """ Returns the unit vector of the vector.  """
@@ -90,17 +89,22 @@ def get_tilt_dir_dji(surface_normal):
     return angle
     
 def rotate_normals(surface_normal, pitch_rad, roll_rad, yaw_rad):
-    
+    '''
     rot_matrix = [
         [np.cos(yaw)*np.cos(pitch), np.cos(yaw)*np.sin(roll)*np.sin(pitch)-np.cos(roll)*np.sin(yaw), np.sin(roll)*np.sin(yaw)+np.cos(roll)*np.cos(yaw)*np.sin(pitch)],
         [np.cos(pitch)*np.sin(yaw), np.cos(roll)*np.cos(yaw)+np.sin(roll)*np.sin(yaw)*np.sin(pitch), np.cos(roll)*np.sin(yaw)*np.sin(pitch)-np.cos(yaw)*np.sin(roll)],
-        [-1*np.sin(pitch), np.cos(pitch)*np.sin(roll), np.cos(roll)*np.cos(pitch)],]
+        [-1*np.sin(pitch), np.cos(pitch)*np.sin(roll), np.cos(roll)*np.cos(pitch)]]
     
     new_surface_normal = np.dot(rot_matrix, surface_normal)
     
-    enu_surface_normal = np.array([new_surface_normal[1], new_surface_normal[0], new_surface_normal[2]])
     
-    return enu_surface_normal
+    '''
+    r = R.from_euler('ZYX', [yaw_rad, pitch_rad, roll_rad], degrees=False)
+    
+    new_surface_normal = r.apply(surface_normal)
+    #enu_surface_normal = np.array([new_surface_normal[1], new_surface_normal[0], new_surface_normal[2]])
+    
+    return new_surface_normal
 
 
 
@@ -110,7 +114,7 @@ def get_tilt_witmotion(pitch, roll, yaw):
     roll_rad = np.radians(roll)
     yaw_rad = np.radians(yaw)
 
-    surface_normal = np.array([0,0,1])
+    surface_normal = np.array([0,0,-1])
 
     
     r = R.from_euler('ZYX', [yaw_rad, roll_rad, pitch_rad], degrees=False)
@@ -132,13 +136,8 @@ def get_tilt_witmotion(pitch, roll, yaw):
     
     return tilt_deg, tilt_dir_deg
 
-
-
-
-
-
 def get_tilt_dji(pitch, roll, yaw):
-    #pitch*=-1
+    
     pitch = np.radians(pitch)
     roll = np.radians(roll)
     yaw = np.radians(yaw)
@@ -168,10 +167,8 @@ def get_tilt_dji(pitch, roll, yaw):
     
     return tilt_deg, tilt_dir_deg
 
-
-
-tilt, tilt_dir = get_tilt_witmotion(pitch, roll, yaw)
-
+tilt, tilt_dir = get_tilt_dji(pitch, roll, yaw)
+new_surface_normal = rotate_normals([0,0,-1], np.radians(pitch), np.radians(roll), np.radians(yaw))
 #slope = 6.3
 
 #diff = tilt_dir - aspect
