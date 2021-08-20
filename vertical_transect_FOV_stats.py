@@ -73,21 +73,23 @@ fig, axes = plt.subplots(5, 1, sharex=True,sharey=True, figsize=(3.35,5))
 a=0
 for index, row in alt_dependence.iterrows():
     
-    print(row['slope'])
     x_vals = np.linspace(20, 70, num=2)
     y_vals = row['y_intercept'] + row['slope'] * x_vals
     ax = sns.lineplot(ax = axes[a], x=x_vals, y=y_vals, color='black')
+    ax = sns.scatterplot(ax = axes[a],x=df.loc[df['FOV']==row['FOV']]['agl_alt'], y=df.loc[df['FOV']==row['FOV']]['absolute_error'], alpha=0.5, color='grey')
+    ax.set_ylabel('')
     
-     
-    
+    if a<2:
+        ax.text(56,-.01, '\nPFOV: ' + str(row['FOV']) + degree_sign,fontsize = 10)
+        ax.text(56,-.09, "$r^2$: " + str(round(row['r2'],2)),fontsize = 10)
     if a==2:
         ax.set_ylabel('Error\n(Landsat albedo - Corrected albedo)', fontsize=12)
         ax.text(56,0.02, '\nPFOV: ' + str(row['FOV']) + degree_sign,fontsize = 10)
-        ax.text(56,-.06, "$r^2$:" + str(round(row['r2'],2)),fontsize = 10)
+        ax.text(56,-.08, "$r^2$: " + str(round(row['r2'],2)),fontsize = 10)
     
-    else:
+    if a>2:
         ax.text(56,0.018, '\nPFOV: ' + str(row['FOV']) + degree_sign,fontsize = 10)
-        ax.text(56,-.048, "$r^2$:" + str(round(row['r2'],2)),fontsize = 10)
+        ax.text(56,-.048, "$r^2$: " + str(round(row['r2'],2)),fontsize = 10)
         
     a+=1
 
@@ -97,7 +99,7 @@ ax.set_xlabel('Altitude AGL (m)', fontsize=12)
 # fake up the array of the scalar mappable. Urgh...
 #sm._A = []
 #plt.colorbar(sm, label='PFOV (' + degree_sign + ')')
-plt.savefig('C:/Users/x51b783/Documents/Mirror/Masters/writing/frontiers_figures/VT_FOV_alt2.tiff', bbox_inches="tight",dpi=300)
+plt.savefig('C:/Users/x51b783/Documents/Mirror/Masters/writing/frontiers_figures/VT_FOV_alt2.png', bbox_inches="tight",dpi=300)
 
 
 

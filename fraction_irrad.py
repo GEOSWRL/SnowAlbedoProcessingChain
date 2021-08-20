@@ -18,10 +18,10 @@ def footprint_area(FOV, altitude):
 
 altitudes = [10, 30]
 
-df = pd.DataFrame(columns = ['Altitude (m)', 'FOV', 'Footprint Diameter (m)','Radiation Fraction'])
+df = pd.DataFrame(columns = ['Altitude (m)', 'FOV', 'Footprint Diameter (m)','Irradiance Fraction'])
 
 for altitude in altitudes:
-    df_add = pd.DataFrame(columns = ['Altitude (m)', 'FOV', 'Footprint Diameter (m)','Radiation Fraction'])
+    df_add = pd.DataFrame(columns = ['Altitude (m)', 'FOV', 'Footprint Diameter (m)','Irradiance Fraction'])
     
     FOVs = np.arange(0,175,.5)
     radii, areas = footprint_area(FOVs, altitude)
@@ -30,7 +30,7 @@ for altitude in altitudes:
     df_add['Altitude (m)'] = [altitude]*len(FOVs)
     df_add['FOV'] = FOVs
     df_add['Footprint Diameter (m)'] = np.multiply(radii,2)
-    df_add['Radiation Fraction'] = fractions
+    df_add['Irradiance Fraction'] = fractions
     
     df = df.append(df_add, ignore_index=True)
     
@@ -39,7 +39,7 @@ for altitude in altitudes:
 
 
 
-sns.set(rc={'figure.figsize':(3.35,4)}) #fig size in inches
+sns.set(rc={'figure.figsize':(3.35,4.2)}) #fig size in inches
 sns.set(font="Arial")
 sns.set_style("whitegrid")
 sns.set_style('ticks')
@@ -51,7 +51,7 @@ pallete = sns.color_palette("colorblind", n_colors = 13)
 ln1 = sns.lineplot(ax = ax1, data = df.loc[df['Altitude (m)'] == 10], x='FOV', y='Footprint Diameter (m)', color=pallete[0], 
                    label='Footprint Diameter, 10 m AGL')
 
-sns.lineplot(ax = ax1, data = df.loc[df['Altitude (m)'] == 30], x='FOV', y='Footprint Diameter (m)', color=pallete[9], 
+sns.lineplot(ax = ax1, data = df.loc[df['Altitude (m)'] == 30], x='FOV', y='Footprint Diameter (m)', color=pallete[5], 
                    label='Footprint Diameter, 30 m AGL')
 
 #specify we want to share the same x-axis
@@ -61,14 +61,14 @@ ax2 = ax1.twinx()
 #ax2.set_ylabel('Avg Percipitation %', fontsize=16)
 
 
-ln2 = sns.lineplot(ax = ax2, data = df.loc[df['Altitude (m)'] == 10], x='FOV', y='Radiation Fraction', color=pallete[7], 
-                   label='Radiation Fraction', linestyle='dashed')
+ln2 = sns.lineplot(ax = ax2, data = df.loc[df['Altitude (m)'] == 10], x='FOV', y='Irradiance Fraction', color=pallete[7], 
+                   label='Irradiance Fraction', linestyle='dashed')
 
 
 
 ax1.set_xlabel('FOV (' + degree_sign + ')', fontsize=12)
 ax1.set_ylabel('Footprint diameter (m)', fontsize=12)
-ax2.set_ylabel('Fraction of Radiation', fontsize=12)
+ax2.set_ylabel('Fraction of Irradiance', fontsize=12)
 
 plt.xticks(ha='center')
 ax1.grid(False)
